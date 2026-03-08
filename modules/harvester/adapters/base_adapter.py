@@ -36,7 +36,7 @@ class BaseAdapter(ABC):
         self._semaphore = semaphore
         self._db = get_db()
 
-        async def run(self) -> int:
+    async def run(self) -> int:
         total_saved = 0
         async with async_playwright() as pw:
             category_urls = await self.get_category_urls()

@@ -176,6 +176,18 @@
     .alert-rojo { background: #7f1d1d22; border: 1px solid var(--red); color: var(--red); padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-top: 6px; }
     .alert-amarillo { background: #78350f22; border: 1px solid var(--yellow); color: var(--yellow); padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-top: 6px; }
 
+    /* Feedback */
+    .feedback-btn { position: fixed; bottom: 24px; right: 24px; z-index: 200; background: var(--accent); color: #fff; border: none; border-radius: 24px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.4); transition: opacity .15s; }
+    .feedback-btn:hover { opacity: .85; }
+    .feedback-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 400; align-items: center; justify-content: center; }
+    .feedback-modal-overlay.open { display: flex; }
+    .feedback-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 90%; max-width: 460px; }
+    .feedback-modal h3 { font-size: 15px; margin-bottom: 16px; }
+    .feedback-modal select, .feedback-modal textarea { width: 100%; padding: 9px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: inherit; margin-bottom: 12px; }
+    .feedback-modal textarea { resize: vertical; min-height: 100px; }
+    .feedback-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .feedback-success { color: var(--green); font-size: 13px; text-align: center; padding: 8px 0; }
+
     /* POS */
     .pos-layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
     .pos-scanner { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
@@ -310,6 +322,59 @@
     <div id="modal-body"></div>
   </div>
 </div>
+
+<!-- Feedback button -->
+<button class="feedback-btn" onclick="openFeedback()">💬 Sugerencias</button>
+
+<!-- Feedback modal -->
+<div class="feedback-modal-overlay" id="feedback-modal-overlay" onclick="closeFeedbackOnOverlay(event)">
+  <div class="feedback-modal">
+    <h3>Enviar sugerencia o reporte</h3>
+    <select id="feedback-tipo">
+      <option value="sugerencia">Sugerencia</option>
+      <option value="bug">Reportar un error</option>
+      <option value="otro">Otro</option>
+    </select>
+    <textarea id="feedback-mensaje" placeholder="Contanos qué encontraste o qué mejorarías..."></textarea>
+    <div id="feedback-status"></div>
+    <div class="feedback-modal-actions">
+      <button class="btn btn-secondary" onclick="closeFeedback()">Cancelar</button>
+      <button class="btn btn-primary" onclick="submitFeedback()">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openFeedback() {
+    document.getElementById('feedback-modal-overlay').classList.add('open');
+    document.getElementById('feedback-status').textContent = '';
+    document.getElementById('feedback-mensaje').value = '';
+  }
+  function closeFeedback() {
+    document.getElementById('feedback-modal-overlay').classList.remove('open');
+  }
+  function closeFeedbackOnOverlay(e) {
+    if (e.target === document.getElementById('feedback-modal-overlay')) closeFeedback();
+  }
+  async function submitFeedback() {
+    const mensaje = document.getElementById('feedback-mensaje').value.trim();
+    const tipo = document.getElementById('feedback-tipo').value;
+    const statusEl = document.getElementById('feedback-status');
+    if (!mensaje) { statusEl.textContent = 'Por favor escribí un mensaje.'; statusEl.style.color = 'var(--red)'; return; }
+    try {
+      const res = await fetch('/api/feedback', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mensaje, tipo }) });
+      if (res.ok) {
+        statusEl.className = 'feedback-success';
+        statusEl.textContent = '¡Gracias! Tu mensaje fue enviado.';
+        setTimeout(closeFeedback, 1500);
+      } else {
+        const err = await res.json();
+        statusEl.textContent = err.detail || 'Error al enviar.';
+        statusEl.style.color = 'var(--red)';
+      }
+    } catch { statusEl.textContent = 'Error de conexión.'; statusEl.style.color = 'var(--red)'; }
+  }
+</script>
 
 <script src="/static/app.js?v=6"></script>
   <footer style="margin-top: 40px; padding: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center;">

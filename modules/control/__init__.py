@@ -4,11 +4,11 @@ Rutas FastAPI para el Dashboard y la API de consumo.
 Se montan sobre la app principal en main.py.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from config.settings import settings
 
@@ -30,6 +30,20 @@ router = APIRouter(prefix="/api", tags=["argenprecios"])
 class WalletConfig(BaseModel):
     tarjetas: list[str] = []
     programas_fidelidad: list[str] = []
+
+
+FEEDBACK_TIPOS = {"bug", "sugerencia", "otro"}
+
+class FeedbackInput(BaseModel):
+    mensaje: str = Field(..., min_length=1, max_length=1000)
+    tipo: str = Field(default="otro")
+
+    @field_validator("tipo")
+    @classmethod
+    def tipo_valido(cls, v: str) -> str:
+        if v not in FEEDBACK_TIPOS:
+            raise ValueError(f"tipo debe ser uno de: {', '.join(sorted(FEEDBACK_TIPOS))}")
+        return v
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +135,18 @@ async def comparar(ean: str):
             for c in resultado.cadenas
         ],
     }
+
+
+@router.post("/feedback")
+async def submit_feedback(body: FeedbackInput):
+    """Recibe feedback del usuario y lo almacena en la colección 'feedback'."""
+    doc = {
+        "mensaje": body.mensaje,
+        "tipo": body.tipo,
+        "capturado_en": datetime.now(tz=timezone.utc),
+    }
+    await get_db().feedback.insert_one(doc)
+    return {"status": "ok"}
 
 
 @router.get("/cadenas")
