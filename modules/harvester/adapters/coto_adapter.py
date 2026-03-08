@@ -1,0 +1,213 @@
+# -*- coding: utf-8 -*-
+"""
+Adaptador para Coto Digital (www.cotodigital.com.ar)
+
+Estrategia de extraccion:
+  1. Navegar por categorias del menu principal (Nueva plataforma Angular)
+  2. Extraer EAN desde: data-cnstrc-item-id ("prod00566098" -> "00566098")
+  3. Extraer precios desde elementos .card-title y selectores especificos
+  4. Manejar paginacion via URL ?page=N
+"""
+
+import asyncio
+import re
+from typing import AsyncIterator
+
+from loguru import logger
+from playwright.async_api import Page
+
+from modules.harvester.adapters.base_adapter import BaseAdapter
+from modules.harvester.models import ProductData
+
+# URLs de categorias de Coto Digital
+_COTO_BASE = "https://www.cotodigital.com.ar"
+_CATEGORY_URLS = [
+    # Categorias principales
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-l%C3%A1cteos/catv00001295",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-bebidas/catv00001256",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados/catv00001296",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza/catv00001258",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-perfumer%C3%ADa/catv00001257",
+    # Almacen
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-golosinas/catv00003539",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-panaderia/catv00003530",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-snacks/catv00003541",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-cereales/catv00003533",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-endulzantes/catv00001270",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-aderezos-y-salsas/catv00002211",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-infusiones/catv00001275",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-conservas/catv00001266",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-harinas/catv00001274",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-encurtidos/catv00001267",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-mermeladas-y-dulces/catv00001273",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-salsas-y-pur%C3%A9-de-tomate/catv00002808",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-aceites-y-condimentos/catv00002975",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-alimento-de-beb%C3%A9s-y-ni%C3%B1os/catv00002976",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-arroz-y-legumbres/catv00002977",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-especias/catv00002978",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-pasta-seca-lista-y-rellenas/catv00002979",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-polvo-para-postres-y-reposteria/catv00002980",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-sopas-caldos-pur%C3%A9-y-saborizantes/catv00002981",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-rebozador-y-pan-rallado/catv00003542",
+    # Bebidas (subcategorias)
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-bebidas-bebidas-sin-alcohol/catv00001301",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-bebidas-bebidas-con-alcohol/catv00001300",
+    # Frescos (subcategorias)
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-fiambres/catv00001299",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-quesos/catv00003769",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-carniceria/catv00001292",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-aves/catv00001462", 
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-pastas-frescas-y-tapas/catv00001297",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-frutas-y-verduras/catv00003285",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-pescaderia/catv00001293",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-huevos/catv00001464",
+]
+
+# Selectores DOM de Coto Digital (Nueva plataforma Angular)
+_SEL_PRODUCT_CARD = ".producto-card"
+_SEL_PRODUCT_NAME = ".nombre-producto"
+_SEL_PRICE_MAIN   = ".card-title"  # Precio destacado (puede ser oferta o regular)
+_SEL_PRICE_SMALL  = "small.text-center.ng-star-inserted"
+_SEL_PRICE_UNIT   = ".centro-precios small.card-text" # Precio tachado o regular
+
+
+class CotoAdapter(BaseAdapter):
+    cadena_id = "COTO"
+
+    async def get_category_urls(self) -> list[str]:
+        return _CATEGORY_URLS
+
+    async def parse_product_list(self, page: Page) -> AsyncIterator[ProductData]:
+        base_url = page.url.split("?")[0]
+        page_num = 1
+        seen_eans: set[str] = set()  # detect recycled pages (Coto loop guard)
+        _MAX_PAGES = 60  # safety cap (~1440 productos max por categoria)
+
+        while page_num <= _MAX_PAGES:
+            if page_num > 1:
+                try:
+                    await page.goto(
+                        f"{base_url}?page={page_num}",
+                        wait_until="domcontentloaded",
+                        timeout=30_000,
+                    )
+                    await asyncio.sleep(1.5)
+                except Exception:
+                    break
+
+            logger.debug(f"[COTO] Pagina {page_num} | {base_url}")
+
+            try:
+                await page.wait_for_selector(_SEL_PRODUCT_CARD, timeout=10_000)
+            except Exception:
+                break
+
+            cards = await page.query_selector_all(_SEL_PRODUCT_CARD)
+            if not cards:
+                break
+
+            new_in_page = 0
+            for card in cards:
+                product = await self._extract_from_card(card, page)
+                if product:
+                    if product.ean not in seen_eans:
+                        seen_eans.add(product.ean)
+                        new_in_page += 1
+                        yield product
+
+            logger.debug(f"[COTO] Pagina {page_num}: {new_in_page} productos nuevos")
+            if new_in_page == 0:  # Coto recycled a previous page = end of results
+                logger.debug(f"[COTO] Sin productos nuevos en pagina {page_num}, deteniendo.")
+                break
+            if len(cards) < 20:  # Coto muestra 24-48; menos = ultima pagina real
+                break
+
+            page_num += 1
+
+    async def _extract_from_card(self, card, page: Page) -> ProductData | None:
+        try:
+            container = await card.query_selector(".card-container")
+            item_id = await container.get_attribute("data-cnstrc-item-id") if container else None
+
+            # Coto usa SKUs internos, no siempre EANs globales.
+            # Intentamos extraer del JSON-LD primero para ver si hay GTIN.
+            card_html = await card.inner_html()
+            ean = self.extract_ean_from_json_ld(card_html)
+
+            if not ean and item_id and item_id.startswith("prod"):
+                # Fallback al ID interno (prefijo 'prod' eliminado)
+                ean = item_id[4:]
+
+            if not ean:
+                return None
+
+            nombre = await self._text(card, _SEL_PRODUCT_NAME)
+            if not nombre:
+                return None
+
+            # Logica de Precios en Coto:
+            # .card-title siempre tiene el precio de venta actual.
+            # small.text-center tiene el precio regular si hay oferta.
+            raw_main = await self._text(card, _SEL_PRICE_MAIN)
+            price_main = self.clean_price(raw_main) if raw_main else None
+
+            raw_small = await self._text(card, _SEL_PRICE_SMALL)
+            price_small = self.clean_price(raw_small) if raw_small else None
+
+            if price_small and price_main and price_main < price_small:
+                # Caso Oferta: Main es el precio rebajado, Small es el lista
+                precio_lista = price_small
+                precio_oferta = price_main
+            else:
+                # Caso Regular: Main es el precio de lista
+                precio_lista = price_main
+                precio_oferta = None
+
+            if not precio_lista:
+                return None
+
+            agregar_btn = await card.query_selector("button.btn-primary")
+            stock_disponible = agregar_btn is not None
+
+            # URL de detalle del producto (para EAN enricher)
+            url_detalle = None
+            link_el = await card.query_selector("a[href*='/producto/']")
+            if not link_el:
+                link_el = await card.query_selector("a")
+            if link_el:
+                href = await link_el.get_attribute("href")
+                if href:
+                    url_detalle = href if href.startswith("http") else f"https://www.cotodigital.com.ar{href}"
+
+            # Precio por unidad (Coto)
+            # Formato: "Precio por 1 Litro: $1.110,66"
+            p_unit = None
+            u_med = None
+            raw_unit = await self._text(card, _SEL_PRICE_UNIT)
+            if raw_unit and "Precio por" in raw_unit:
+                m_unit = re.search(r"Precio por ([\d.,]+)\s+([a-zA-Z]+):\s+\$([\d.,]+)", raw_unit, re.I)
+                if m_unit:
+                    u_med = m_unit.group(2).strip()
+                    p_unit = self.clean_price(m_unit.group(3))
+
+            return ProductData(
+                ean=ean,
+                nombre=nombre.strip(),
+                cadena_id=self.cadena_id,
+                precio_lista=precio_lista,
+                precio_oferta=precio_oferta,
+                stock_disponible=stock_disponible,
+                url_origen=page.url,
+                url_detalle=url_detalle,
+                precio_por_unidad=p_unit,
+                unidad_medida=u_med,
+            )
+
+        except Exception:
+            return None
+
+    @staticmethod
+    async def _text(element, selector: str) -> str | None:
+        el = await element.query_selector(selector)
+        if not el: return None
+        return (await el.inner_text()).strip() or None

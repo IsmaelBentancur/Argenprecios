@@ -1,0 +1,29 @@
+# Control de versión
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Logs (se montan como volumen en producción)
+logs/
+
+# Secrets — nunca copiar al contenedor
+.env
+*.env
+
+# Playwright cache local (se instala en imagen)
+.playwright/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
