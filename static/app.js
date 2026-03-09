@@ -30,6 +30,12 @@ let selFidelidad = new Set();
 document.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
+  // Auth check (best-effort: don't block the rest of the UI)
+  try {
+    const me = await fetch('/auth/me', { credentials: 'same-origin' }).then(r => r.json());
+    renderAuthHeader(me);
+  } catch { /* ignore */ }
+
   try {
     const data = await apiFetch('/api/init');
     
@@ -97,6 +103,25 @@ async function loadStats() {
     const data = await apiFetch('/api/stats');
     renderStats(data);
   } catch { /* silencioso */ }
+}
+
+// ---------------------------------------------------------------------------
+// Auth UI
+// ---------------------------------------------------------------------------
+function renderAuthHeader(me) {
+  const el = document.getElementById('auth-status');
+  if (!el) return;
+  if (me?.authenticated) {
+    el.innerHTML = `<span style="color:var(--muted);font-size:12px">${escHtml(me.email)}</span>
+      <button class="cart-btn" onclick="doLogout()" style="margin-left:8px">Salir</button>`;
+  } else {
+    el.innerHTML = `<a href="/auth/login" style="font-size:13px;color:var(--accent)">Iniciar sesión</a>`;
+  }
+}
+
+async function doLogout() {
+  await fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  window.location.reload();
 }
 
 // ---------------------------------------------------------------------------
@@ -590,8 +615,14 @@ function _renderMaxBreakdown(breakdown, total, subtitle) {
 // ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
-async function apiFetch(url, options = {}) {
-  const res = await fetch(API + url, options);
+async function apiFetch(url, options = {}, _isRetry = false) {
+  const res = await fetch(API + url, { credentials: 'same-origin', ...options });
+  if (res.status === 401 && !_isRetry) {
+    const r = await fetch('/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+    if (r.ok) return apiFetch(url, options, true);
+    window.location.href = '/auth/login';
+    throw new Error('Sesión expirada');
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail ?? res.statusText);

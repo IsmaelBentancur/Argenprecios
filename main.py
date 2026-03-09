@@ -8,13 +8,15 @@ import sys
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException  # noqa: F401 (Header kept for unused import cleanliness)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from loguru import logger
 
 from config.settings import settings
 from db.client import init_indexes, close_client
+from modules.auth import auth_router
+from modules.auth.dependencies import require_auth
 from modules.clock.scheduler import build_scheduler, trigger_manual, cancel_scraping, get_last_log
 from modules.control import router as control_router
 
@@ -75,12 +77,6 @@ async def lifespan(app: FastAPI):
 # API
 # ---------------------------------------------------------------------------
 
-async def require_api_key(x_api_key: str = Header(default="")) -> None:
-    """Dependencia de autenticación por API Key. Se omite si API_KEY no está configurada."""
-    if settings.api_key and x_api_key != settings.api_key:
-        raise HTTPException(status_code=401, detail="API Key inválida o ausente.")
-
-
 app = FastAPI(
     title="Argenprecios API",
     version="0.1.0",
@@ -88,6 +84,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Auth router (must be mounted before control_router)
+app.include_router(auth_router)
 # Módulo 6: rutas de API y Dashboard
 app.include_router(control_router)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -110,14 +108,14 @@ async def health():
     return {"status": "ok" if db_status == "ok" else "degraded", "db": db_status, "version": "0.1.0"}
 
 
-@app.post("/clock/trigger", dependencies=[Depends(require_api_key)])
+@app.post("/clock/trigger", dependencies=[Depends(require_auth)])
 async def manual_trigger():
     """Dispara un ciclo de scraping inmediatamente (uso desde Dashboard)."""
     result = await trigger_manual()
     return result
 
 
-@app.post("/clock/cancel", dependencies=[Depends(require_api_key)])
+@app.post("/clock/cancel", dependencies=[Depends(require_auth)])
 async def cancel_trigger():
     """Cancela el ciclo de scraping activo."""
     return await cancel_scraping()

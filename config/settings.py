@@ -37,6 +37,29 @@ class Settings(BaseSettings):
     # Timezone
     tz: str = "America/Argentina/Buenos_Aires"
 
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    # JWT
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 15
+    refresh_token_expire_days: int = 7
+
+    # Allowlist (comma-separated Gmail addresses)
+    allowed_emails: str = ""
+
+    # Frontend base URL (used for OAuth redirect after login)
+    frontend_url: str = "http://localhost:8000"
+
+    # Cookie security (False for localhost, True for HTTPS prod)
+    cookie_secure: bool = False
+
+    @property
+    def allowed_emails_set(self) -> set:
+        return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
+
 
 @lru_cache
 def get_settings() -> Settings:

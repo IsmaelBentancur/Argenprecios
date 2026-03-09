@@ -7,16 +7,10 @@ Se montan sobre la app principal en main.py.
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
-from config.settings import settings
-
-
-async def _require_api_key(x_api_key: str = Header(default="")) -> None:
-    if settings.api_key and x_api_key != settings.api_key:
-        raise HTTPException(status_code=401, detail="API Key inválida o ausente.")
-
+from modules.auth.dependencies import require_auth
 from db.client import get_db
 from modules.brain.calculator import comparar_ean, buscar_productos, obtener_historial_ean
 
@@ -113,7 +107,7 @@ async def get_wallet():
     return {"tarjetas": doc.get("tarjetas", []), "programas_fidelidad": doc.get("programas_fidelidad", [])}
 
 
-@router.post("/wallet", dependencies=[Depends(_require_api_key)])
+@router.post("/wallet", dependencies=[Depends(require_auth)])
 async def save_wallet(config: WalletConfig):
     """Guarda la billetera del usuario (tarjetas y programas de fidelidad)."""
     await get_db().config_usuario.update_one(
