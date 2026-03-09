@@ -22,11 +22,33 @@ _PROMO_SELECTORS: dict[str, list[str]] = {
         ".beneficios-container",
         ".promo-texto",
     ],
-    "CARREFOUR": [
-        "[class*='promotions']",
-        "[class*='banner']",
-        "[data-testid*='promo']",
-        ".shelf-title",
+    # Cencosud VTEX: banners con info de descuento en texto o alt de imágenes
+    "JUMBO": [
+        "[class*='vtex-search-2-x-banner']",
+        "[class*='benefit']",
+        "[class*='promo']",
+        ".promotions-banner",
+        ".text-promo",
+    ],
+    "DISCO": [
+        "[class*='vtex-search-2-x-banner']",
+        "[class*='benefit']",
+        "[class*='promo']",
+        ".promotions-banner",
+        ".text-promo",
+    ],
+    "VEA": [
+        "[class*='vtex-search-2-x-banner']",
+        "[class*='benefit']",
+        "[class*='promo']",
+        ".promotions-banner",
+        ".text-promo",
+    ],
+    "DIA": [".benefit-item", ".dia-promo-text", ".banner-promo"],
+    "CHANGOMAS": [
+        "[class*='vtex-search-2-x-banner']",
+        "[class*='benefit']",
+        "[class*='promo']",
     ],
 }
 
@@ -36,10 +58,21 @@ _PROMO_URLS: dict[str, list[str]] = {
         "https://www.cotodigital.com.ar/sitios/cdigi/beneficios",
         "https://www.cotodigital.com.ar/sitios/cdigi/promociones",
     ],
-    "CARREFOUR": [
-        "https://www.carrefour.com.ar/promociones",
-        "https://www.carrefour.com.ar/descuentos-bancarios",
+    # Cencosud usa /promociones-bancarias (confirmado por Gemini)
+    "JUMBO": [
+        "https://www.jumbo.com.ar/promociones-bancarias",
+        "https://www.jumbo.com.ar/ofertas/beneficios",
     ],
+    "DISCO": [
+        "https://www.disco.com.ar/promociones-bancarias",
+        "https://www.disco.com.ar/ofertas/beneficios",
+    ],
+    "VEA": [
+        "https://www.vea.com.ar/promociones-bancarias",
+        "https://www.vea.com.ar/ofertas/beneficios",
+    ],
+    "DIA": ["https://diaonline.supermercadosdia.com.ar/ofertas/beneficios"],
+    "CHANGOMAS": ["https://www.masonline.com.ar/promociones-bancarias"],
 }
 
 
@@ -144,3 +177,4 @@ async def _save_reglas(cadena_id: str, reglas: list[ReglaDescuento]) -> int:
 
     result = await get_db().reglas_descuento.bulk_write(ops, ordered=False)
     return result.upserted_count + result.modified_count
+

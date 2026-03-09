@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Adaptador para Coto Digital (www.cotodigital.com.ar)
 
@@ -22,11 +22,26 @@ from modules.harvester.models import ProductData
 # URLs de categorias de Coto Digital
 _COTO_BASE = "https://www.cotodigital.com.ar"
 _CATEGORY_URLS = [
-    # Categorias principales
-    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-frescos-l%C3%A1cteos/catv00001295",
-    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-bebidas/catv00001256",
-    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados/catv00001296",
-    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza/catv00001258",
+    # Congelados (subcategorias)
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-pescaderia/catv00003240",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-nuggets-patitas-y-bocaditos/catv00003239",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-hamburguesas-y-milanesas/catv00003237",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-papas-congeladas-fritas/catv00003201",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-helados-y-postres/catv00003146",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-comidas-congeladas/catv00003238",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-vegetales-congelados/catv00003234",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-congelados-frutas-congeladas/catv00003204",
+    # Limpieza (subcategorias)
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-lavado/catv00002752",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-papeles/catv00003017",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-insecticidas/catv00003025",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-calzado/catv00003034",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-accesorios-de-limpieza/catv00003035",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-desodorantes-de-ambiente/catv00003036",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-limpieza-de-bano/catv00003037",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-limpieza-de-cocina/catv00003038",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-limpieza-de-pisos-y-superficies/catv00003039",
+    f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-limpieza-lavandinas/catv00004744",
     f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-perfumer%C3%ADa/catv00001257",
     # Almacen
     f"{_COTO_BASE}/sitios/cdigi/productos/categorias/catalogo-almac%C3%A9n-golosinas/catv00003539",
@@ -77,13 +92,21 @@ class CotoAdapter(BaseAdapter):
     async def get_category_urls(self) -> list[str]:
         return _CATEGORY_URLS
 
-    async def parse_product_list(self, page: Page) -> AsyncIterator[ProductData]:
-        base_url = page.url.split("?")[0]
+    async def parse_product_list(self, page: Page, url: str) -> AsyncIterator[ProductData]:
+        base_url = url.split("?")[0]
         page_num = 1
         seen_eans: set[str] = set()  # detect recycled pages (Coto loop guard)
         _MAX_PAGES = 60  # safety cap (~1440 productos max por categoria)
 
         while page_num <= _MAX_PAGES:
+            # Navegar a la página actual
+            try:
+                current_url = f"{base_url}?page={page_num}" if page_num > 1 else base_url
+                await page.goto(current_url, wait_until="domcontentloaded", timeout=45000)
+                if page_num > 1: await asyncio.sleep(1.5)
+            except Exception as e:
+                logger.warning(f"[COTO] Error navegando a p{page_num}: {e}")
+                break
             if page_num > 1:
                 try:
                     await page.goto(
@@ -211,3 +234,6 @@ class CotoAdapter(BaseAdapter):
         el = await element.query_selector(selector)
         if not el: return None
         return (await el.inner_text()).strip() or None
+
+
+

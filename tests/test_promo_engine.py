@@ -20,7 +20,7 @@ class TestParsePromoText(unittest.TestCase):
         self.assertAlmostEqual(regla.factor_multiplicador, 0.8, places=5)
 
     def test_directa_off(self):
-        regla = parse_promo_text("Hasta 30% OFF en productos seleccionados", "CARREFOUR")
+        regla = parse_promo_text("Hasta 30% OFF en productos seleccionados", "COTO")
         self.assertIsNotNone(regla)
         self.assertEqual(regla.tipo, TipoPromo.DIRECTA)
         self.assertEqual(regla.descuento_pct, 30.0)
@@ -43,7 +43,7 @@ class TestParsePromoText(unittest.TestCase):
         self.assertEqual(regla.tipo, TipoPromo.MULTI_UNIT)
 
     def test_multi_2da_unidad(self):
-        regla = parse_promo_text("2da unidad al 70%", "CARREFOUR")
+        regla = parse_promo_text("2da unidad al 70%", "JUMBO")
         self.assertIsNotNone(regla)
         self.assertEqual(regla.tipo, TipoPromo.MULTI_UNIT)
         self.assertEqual(regla.descuento_pct, 70.0)
@@ -73,7 +73,7 @@ class TestParsePromoText(unittest.TestCase):
 
     # --- BANCARIA ---
     def test_bancaria_con_banco(self):
-        regla = parse_promo_text("20% de descuento con Banco Nación los lunes", "CARREFOUR")
+        regla = parse_promo_text("20% de descuento con Banco Nación los lunes", "COTO")
         self.assertIsNotNone(regla)
         self.assertEqual(regla.tipo, TipoPromo.BANCARIA)
         self.assertEqual(regla.banco, "Banco Nación")
@@ -117,14 +117,8 @@ class TestParsePromoText(unittest.TestCase):
         self.assertEqual(regla.programa_fidelidad, "Comunidad Coto")
         self.assertEqual(regla.descuento_pct, 15.0)
 
-    def test_fidelidad_mi_carrefour(self):
-        regla = parse_promo_text("Descuento exclusivo Mi Carrefour", "CARREFOUR")
-        self.assertIsNotNone(regla)
-        self.assertEqual(regla.tipo, TipoPromo.FIDELIDAD)
-        self.assertEqual(regla.programa_fidelidad, "Mi Carrefour")
-
     def test_fidelidad_club_la_nacion_sin_tilde(self):
-        regla = parse_promo_text("Beneficio club la nacion 20%", "CARREFOUR")
+        regla = parse_promo_text("Beneficio club la nacion 20%", "COTO")
         self.assertIsNotNone(regla)
         self.assertEqual(regla.programa_fidelidad, "Club La Nación")
 
@@ -296,7 +290,7 @@ class TestCalcularPrecioNeto(unittest.TestCase):
 
     def test_fidelidad_no_aplica_con_programa_incorrecto(self):
         regla = self._regla(TipoPromo.FIDELIDAD, descuento_pct=15.0, programa="Comunidad Coto")
-        precio = calcular_precio_neto(1000.0, [regla], programas_usuario=["Mi Carrefour"])
+        precio = calcular_precio_neto(1000.0, [regla], programas_usuario=["Jumbo+"])
         self.assertEqual(precio, 1000.0)
 
     def test_fidelidad_aplica_sin_filtro_programa(self):

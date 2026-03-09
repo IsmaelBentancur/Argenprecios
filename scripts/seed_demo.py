@@ -13,8 +13,7 @@ MONGO_URI = "mongodb://localhost:27017"
 MONGO_DB  = "argenprecios"
 
 CADENAS = [
-    {"cadena_id": "COTO",      "nombre": "Coto CICSA",         "url_base": "https://www.cotodigital.com.ar", "activo": True, "adaptador": "coto",      "prioridad": 1},
-    {"cadena_id": "CARREFOUR", "nombre": "Carrefour Argentina", "url_base": "https://www.carrefour.com.ar",    "activo": True, "adaptador": "carrefour", "prioridad": 2},
+    {"cadena_id": "COTO", "nombre": "Coto CICSA", "url_base": "https://www.cotodigital.com.ar", "activo": True, "adaptador": "coto", "prioridad": 1},
 ]
 
 

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Módulo 6 — The Control
 Rutas FastAPI para el Dashboard y la API de consumo.
 Se montan sobre la app principal en main.py.
@@ -18,7 +18,7 @@ async def _require_api_key(x_api_key: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="API Key inválida o ausente.")
 
 from db.client import get_db
-from modules.brain.calculator import comparar_ean, buscar_productos
+from modules.brain.calculator import comparar_ean, buscar_productos, obtener_historial_ean
 
 router = APIRouter(prefix="/api", tags=["argenprecios"])
 
@@ -47,6 +47,60 @@ class FeedbackInput(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Inicializacion consolidada
+# ---------------------------------------------------------------------------
+
+@router.get("/init")
+async def get_init():
+    """Consolidado de inicio para el Dashboard (evita múltiples round-trips)."""
+    db = get_db()
+    cadenas = await db.comercios_config.find({"activo": True}, {"_id": 0}).to_list(length=None)
+    wallet_doc = await db.config_usuario.find_one({"_id": "wallet"})
+    wallet = {
+        "tarjetas": wallet_doc.get("tarjetas", []) if wallet_doc else [],
+        "programas_fidelidad": wallet_doc.get("programas_fidelidad", []) if wallet_doc else []
+    }
+    total_productos = await db.historial_precios.estimated_document_count()
+    total_reglas = await db.reglas_descuento.estimated_document_count()
+    ultimo_ciclo_doc = await db.scraping_logs.find_one(sort=[("started_at", -1)])
+    
+    metadata = {
+        "tarjetas": [
+            {"id": "Visa", "label": "Visa"}, {"id": "Mastercard", "label": "Mastercard"},
+            {"id": "Amex", "label": "American Express"}, {"id": "Débito", "label": "Débito"},
+            {"id": "Cuenta DNI", "label": "Cuenta DNI"}, {"id": "MODO", "label": "MODO"},
+            {"id": "BUEPP", "label": "BUEPP"}, {"id": "Naranja", "label": "Naranja X"},
+            {"id": "Mercado Pago", "label": "Mercado Pago"}, {"id": "Ualá", "label": "Ualá"},
+            {"id": "Personal Pay", "label": "Personal Pay"}, {"id": "ANSES", "label": "ANSES"},
+            {"id": "Jubilados", "label": "Jubilados"}
+        ],
+        "fidelidad": {
+            "COTO": [{"id": "Comunidad Coto", "label": "Comunidad Coto"}],
+            "JUMBO": [{"id": "Jumbo+", "label": "Jumbo+"}],
+            "DISCO": [{"id": "Disco+", "label": "Disco+"}],
+            "VEA": [{"id": "Vea Más", "label": "Vea Más"}],
+            "DIA": [{"id": "Club Dia", "label": "Club Dia"}],
+            "CHANGOMAS": [{"id": "Mas Online", "label": "Mas Online"}],
+            "GLOBAL": [{"id": "Club La Nación", "label": "Club La Nación"}, {"id": "Clarín 365", "label": "Clarín 365"}]
+        }
+    }
+    
+    return {
+        "cadenas": cadenas,
+        "wallet": wallet,
+        "stats": {
+            "total_productos": total_productos,
+            "total_reglas_descuento": total_reglas,
+            "ultimo_ciclo": {
+                "estado": ultimo_ciclo_doc.get("status") if ultimo_ciclo_doc else None,
+                "iniciado": str(ultimo_ciclo_doc.get("started_at")) if ultimo_ciclo_doc else None,
+            }
+        },
+        "metadata": metadata
+    }
+
+
 # Wallet del usuario (billetera virtual)
 # ---------------------------------------------------------------------------
 
@@ -77,7 +131,7 @@ async def save_wallet(config: WalletConfig):
 @router.get("/productos")
 async def get_productos(
     q: str = Query(default="", description="Búsqueda por nombre"),
-    cadena: str = Query(default="", description="Filtrar por cadena (COTO, CARREFOUR)"),
+    cadena: str = Query(default="", description="Filtrar por cadena (ej: COTO, JUMBO)"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
 ):
@@ -157,6 +211,35 @@ async def get_cadenas():
 
 
 
+@router.get("/alertas")
+async def get_alertas(
+    tipo: str = Query(default="", description="'baja' o 'suba'"),
+    cadena: str = Query(default="", description="Filtrar por cadena"),
+    limit: int = Query(default=50, ge=1, le=200),
+):
+    """Variaciones de precio detectadas en el ultimo ciclo."""
+    db = get_db()
+    filtro: dict = {}
+    if tipo in ("baja", "suba"):
+        filtro["tipo"] = tipo
+    if cadena:
+        filtro["cadena_id"] = cadena.upper()
+
+    docs = await db.price_alerts.find(filtro, {"_id": 0}).sort(
+        "variacion_pct", 1
+    ).limit(limit).to_list(length=None)
+    return {"total": len(docs), "items": docs}
+
+
+@router.get("/historial/{ean}")
+async def get_historial(ean: str):
+    if not (len(ean) in (8, 13) and ean.isdigit()):
+        raise HTTPException(status_code=400, detail="EAN inválido.")
+    resultado = await obtener_historial_ean(ean)
+    if not resultado:
+        raise HTTPException(status_code=404, detail="No hay historial para este EAN.")
+    return resultado
+
 @router.get("/stats")
 async def get_stats():
     """Estadísticas rápidas del sistema para el Dashboard."""
@@ -172,3 +255,6 @@ async def get_stats():
             "iniciado": str(ultimo_ciclo.get("started_at")) if ultimo_ciclo else None,
         },
     }
+
+
+

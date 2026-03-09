@@ -1,4 +1,4 @@
-"""
+﻿"""
 Módulo 4 — The Brain
 Inteligencia de precios: cruza historial de precios con reglas del Promo Engine
 y el perfil de tarjetas del usuario para calcular el mejor precio neto final.
@@ -41,8 +41,8 @@ async def _resolve_ean(ean: str, db) -> str:
     Retorna el GTIN real si existe mapeo, o el EAN original si no.
     La resolución es transparente: el historial almacenado no se modifica.
     """
-    from modules.harvester.ean_utils import is_internal_coto_id
-    if is_internal_coto_id(ean):
+    from modules.harvester.ean_utils import is_internal_id
+    if is_internal_id(ean):
         mapping = await db.coto_mappings.find_one({"ean_interno": ean, "gtin": {"$ne": None}})
         if mapping and mapping.get("gtin"):
             return mapping["gtin"]
@@ -61,7 +61,7 @@ async def comparar_ean(
     """
     db = get_db()
 
-    # Resolver EAN interno → GTIN real (transparente, no altera el historial)
+    # Resolver EAN interno í¢â€ â€™ GTIN real (transparente, no altera el historial)
     ean = await _resolve_ean(ean, db)
 
     # Obtener último precio por cadena (documento más reciente del bucket)
@@ -181,14 +181,27 @@ async def buscar_productos(
         # Cadena presente como clave del mapa
         match[f"cadenas.{cadena_id.upper()}"] = {"$exists": True}
 
-    pipeline = [
-        {"$match": match},
-        {"$sort": {"nombre": 1}},
-        {"$facet": {
-            "metadata": [{"$count": "total"}],
-            "data": [{"$skip": skip}, {"$limit": limit}],
-        }},
-    ]
+    # Ordenar por relevancia textScore cuando hay búsqueda; por nombre si no.
+    if q:
+        sort_stage = {"$sort": {"score": {"$meta": "textScore"}, "nombre": 1}}
+        pipeline = [
+            {"$match": match},
+            {"$addFields": {"score": {"$meta": "textScore"}}},
+            sort_stage,
+            {"$facet": {
+                "metadata": [{"$count": "total"}],
+                "data": [{"$skip": skip}, {"$limit": limit}],
+            }},
+        ]
+    else:
+        pipeline = [
+            {"$match": match},
+            {"$sort": {"nombre": 1}},
+            {"$facet": {
+                "metadata": [{"$count": "total"}],
+                "data": [{"$skip": skip}, {"$limit": limit}],
+            }},
+        ]
 
     result = await db.productos_vigentes.aggregate(pipeline).to_list(length=1)
     if not result:
@@ -196,10 +209,16 @@ async def buscar_productos(
 
     total = result[0]["metadata"][0]["total"] if result[0]["metadata"] else 0
 
-    # Reglas globales para aplicar descuentos
-    reglas_cursor = db.reglas_descuento.find({"ean": None})
-    reglas_raw = await reglas_cursor.to_list(length=None)
-    reglas_globales = _hydrate_reglas(reglas_raw)
+    # 1. Reglas globales (aplican a toda la cadena)
+    reglas_globales_cursor = db.reglas_descuento.find({"ean": None})
+    reglas_globales_raw = await reglas_globales_cursor.to_list(length=None)
+    reglas_globales = _hydrate_reglas(reglas_globales_raw)
+
+    # 2. Reglas por EAN (específicas para productos del resultado)
+    eans_en_pagina = [d["ean"] for d in result[0]["data"]]
+    reglas_ean_cursor = db.reglas_descuento.find({"ean": {"$in": eans_en_pagina}})
+    reglas_ean_raw = await reglas_ean_cursor.to_list(length=None)
+    reglas_ean = _hydrate_reglas(reglas_ean_raw)
 
     items = []
     for doc in result[0]["data"]:
@@ -218,7 +237,9 @@ async def buscar_productos(
                 precio_lista = precio_oferta
 
             precio_base = precio_oferta if precio_oferta else precio_lista
+            # Combinar reglas globales + reglas específicas para este EAN
             reglas_cadena = [r for r in reglas_globales if r.cadena_id == cad_id]
+            reglas_cadena += [r for r in reglas_ean if r.cadena_id == cad_id and r.ean == doc["ean"]]
 
             precio_neto = calcular_precio_neto(
                 precio_base,
@@ -293,3 +314,50 @@ def _regla_aplica(regla, tarjetas: list[str] | None, programas: list[str] | None
     if regla.tipo == TipoPromo.FIDELIDAD and programas is not None:
         return (regla.programa_fidelidad or "").lower() in [p.lower() for p in (programas or [])]
     return True
+
+
+
+
+
+async def obtener_historial_ean(ean: str) -> dict | None:
+    """
+    Recupera la evolución de precios de un EAN en todas las cadenas.
+    Devuelve los puntos para graficar (ts, p_lista, p_oferta).
+    """
+    db = get_db()
+    ean = await _resolve_ean(ean, db)
+
+    # Buscar todos los registros históricos (buckets) para este EAN
+    cursor = db.historial_precios.find({"ean": ean}).sort("updated_at", 1)
+    docs = await cursor.to_list(length=None)
+
+    if not docs:
+        return None
+
+    nombre = docs[-1].get("nombre", "")
+    historia = {}
+
+    for doc in docs:
+        cadena_id = doc["cadena_id"]
+        if cadena_id not in historia:
+            historia[cadena_id] = []
+        
+        # Cada doc es un bucket semanal con una lista de 'capturas'
+        capturas = doc.get("capturas", [])
+        for cap in capturas:
+            historia[cadena_id].append({
+                "ts": cap.get("ts"),
+                "p_lista": cap.get("precio_lista"),
+                "p_oferta": cap.get("precio_oferta")
+            })
+
+    # Ordenar puntos por tiempo para cada cadena
+    for cid in historia:
+        historia[cid].sort(key=lambda x: x["ts"] if x["ts"] else datetime.min)
+
+    return {
+        "ean": ean,
+        "nombre": nombre,
+        "historia": historia
+    }
+

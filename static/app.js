@@ -1,4 +1,4 @@
-// Argenprecios Dashboard — Vanilla JS
+﻿// Argenprecios Dashboard — Vanilla JS
 const API = '';  // mismo origen
 
 // ---------------------------------------------------------------------------
@@ -13,53 +13,71 @@ let activeCadenas = []; // cadena_ids presentes en los resultados actuales
 let cart = [];           // [{ean, nombre, cadenas: [{cadena_id, precio_neto, ...}]}]
 let cartMode = 'single'; // 'single' | 'split' | 'max'
 const productCache = new Map(); // ean -> item (for quick add-to-cart)
-// Wallet — datos predefinidos
-const TARJETAS_DEF = [
-  { id: 'Visa',         label: 'Visa Crédito' },
-  { id: 'Mastercard',   label: 'Mastercard' },
-  { id: 'Débito',       label: 'Débito' },
-  { id: 'MODO',         label: 'MODO' },
-  { id: 'Naranja',      label: 'Naranja X' },
-  { id: 'Mercado Pago', label: 'Mercado Pago' },
-  { id: 'ANSES',        label: 'ANSES' },
-  { id: 'Jubilados',    label: 'Jubilados' },
-];
-const SUPERMERCADOS_DEF = [
-  { id: 'COTO',      label: 'Coto' },
-  { id: 'CARREFOUR', label: 'Carrefour' },
-];
-const FIDELIDAD_DEF = {
-  COTO:      [{ id: 'Comunidad Coto', label: 'Comunidad Coto' }],
-  CARREFOUR: [{ id: 'Mi Carrefour',   label: 'Mi Carrefour' }],
-};
 
-let selTarjetas  = new Set(TARJETAS_DEF.map(t => t.id));
-let selSupers    = new Set(SUPERMERCADOS_DEF.map(s => s.id));
-let selFidelidad = new Set([].concat.apply([], Object.values(FIDELIDAD_DEF)).map(f => f.id));
+// Metadata dinámica (se carga vía /api/init)
+let TARJETAS_DEF = [];
+let SUPERMERCADOS_DEF = [];
+let FIDELIDAD_DEF = {};
+
+let selTarjetas  = new Set();
+let selSupers    = new Set();
+let selFidelidad = new Set();
 
 
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', () => {
-  renderWallet();
-  loadStats();
-  loadWallet();
-  loadCadenaFilter();
-  loadProducts();
-  loadHarvesterStatus();
-  setInterval(loadStats, 30_000);
-  setInterval(loadHarvesterStatus, 15_000);
-});
+document.addEventListener('DOMContentLoaded', initApp);
 
-async function loadCadenaFilter() {
+async function initApp() {
   try {
-    const cadenas = await apiFetch('/api/cadenas');
-    const select = document.getElementById('cadena-filter');
-    if (!select || !cadenas?.length) return;
-    select.innerHTML = '<option value="">Todas las cadenas</option>' +
-      cadenas.map(c => `<option value="${escHtml(c.cadena_id)}">${escHtml(c.nombre || c.cadena_id)}</option>`).join('');
-  } catch { /* mantiene el select estático como fallback */ }
+    const data = await apiFetch('/api/init');
+    
+    // 1. Cargar Metadata
+    TARJETAS_DEF = data.metadata.tarjetas;
+    FIDELIDAD_DEF = data.metadata.fidelidad;
+    SUPERMERCADOS_DEF = data.cadenas.map(c => ({ id: c.cadena_id, label: c.nombre || c.cadena_id }));
+    
+    // 2. Cargar Wallet (Preferencias guardadas + todas las cadenas activas por defecto)
+    selTarjetas = new Set(data.wallet.tarjetas);
+    if (selTarjetas.size === 0) selTarjetas = new Set(TARJETAS_DEF.map(t => t.id));
+    
+    selFidelidad = new Set(data.wallet.programas_fidelidad);
+    selSupers = new Set(SUPERMERCADOS_DEF.map(s => s.id));
+    
+    // 3. Renderizar UI Inicial
+    renderWallet();
+    renderStats(data.stats);
+    renderCadenaFilter(data.cadenas);
+    
+    // 4. Cargar datos
+    loadProducts();
+    loadHarvesterStatus();
+    
+    // 5. Polls
+    setInterval(loadStats, 30_000);
+    setInterval(loadHarvesterStatus, 15_000);
+    updateClock();
+    setInterval(updateClock, 1000);
+    
+  } catch (e) {
+    console.error('Init error:', e);
+    showToast('Error de conexión con el servidor', true);
+  }
+}
+
+function renderStats(data) {
+  document.getElementById('stat-productos').textContent = data.total_productos?.toLocaleString('es-AR') ?? '—';
+  document.getElementById('stat-reglas').textContent = data.total_reglas_descuento?.toLocaleString('es-AR') ?? '—';
+  const ciclo = data.ultimo_ciclo;
+  document.getElementById('stat-ciclo').textContent = ciclo?.estado ? `${ciclo.estado} (${formatDate(ciclo.iniciado)})` : 'Sin datos';
+}
+
+function renderCadenaFilter(cadenas) {
+  const select = document.getElementById('cadena-filter');
+  if (!select) return;
+  select.innerHTML = '<option value="">Todas las cadenas</option>' +
+    cadenas.map(c => `<option value="${escHtml(c.cadena_id)}">${escHtml(c.nombre || c.cadena_id)}</option>`).join('');
 }
 
 // ---------------------------------------------------------------------------
@@ -67,54 +85,42 @@ async function loadCadenaFilter() {
 // ---------------------------------------------------------------------------
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));     
   document.getElementById(`tab-${name}`).classList.add('active');
 }
 
 // ---------------------------------------------------------------------------
-// Stats
+// Stats (Legacy, keep for interval)
 // ---------------------------------------------------------------------------
 async function loadStats() {
   try {
     const data = await apiFetch('/api/stats');
-    document.getElementById('stat-productos').textContent =
-      data.total_productos?.toLocaleString('es-AR') ?? '—';
-    document.getElementById('stat-reglas').textContent =
-      data.total_reglas_descuento?.toLocaleString('es-AR') ?? '—';
-    const ciclo = data.ultimo_ciclo;
-    document.getElementById('stat-ciclo').textContent =
-      ciclo?.estado ? `${ciclo.estado} (${formatDate(ciclo.iniciado)})` : 'Sin datos';
+    renderStats(data);
   } catch { /* silencioso */ }
 }
 
 // ---------------------------------------------------------------------------
 // Wallet
 // ---------------------------------------------------------------------------
-async function loadWallet() {
-  try {
-    const data = await apiFetch('/api/wallet');
-    if (data.tarjetas?.length)            selTarjetas  = new Set(data.tarjetas);
-    if (data.programas_fidelidad?.length) selFidelidad = new Set(data.programas_fidelidad);
-  } catch { /* silencioso */ }
-  renderWallet();
-}
-
 function renderWallet() {
   document.getElementById('chips-tarjetas').innerHTML = TARJETAS_DEF.map(t =>
     `<div class="wallet-chip ${selTarjetas.has(t.id) ? 'on' : ''}" onclick="toggleTarjeta('${t.id}')">${t.label}</div>`
   ).join('');
 
-  document.getElementById('chips-supermercados').innerHTML = SUPERMERCADOS_DEF.map(s =>
+  document.getElementById('chips-supermercados').innerHTML = SUPERMERCADOS_DEF.map(s =>   
     `<div class="wallet-chip ${selSupers.has(s.id) ? 'on' : ''}" onclick="toggleSuper('${s.id}')">${s.label}</div>`
   ).join('');
 
+  // Fidelidad específica de cadenas seleccionadas + GLOBAL (La Nacion/365)
   const fidelChips = SUPERMERCADOS_DEF
     .filter(s => selSupers.has(s.id) && FIDELIDAD_DEF[s.id]?.length)
-    .flatMap(s => FIDELIDAD_DEF[s.id]);
+    .flatMap(s => FIDELIDAD_DEF[s.id])
+    .concat(FIDELIDAD_DEF['GLOBAL'] || []);
+
   const fidelEl = document.getElementById('chips-fidelidad');
   if (fidelChips.length) {
     fidelEl.innerHTML = `<div class="wallet-group" style="margin-top:10px">
-      <div class="wallet-group-label">Fidelidad</div>
+      <div class="wallet-group-label">Programas Especiales / Fidelidad</div>
       <div class="wallet-chips">${fidelChips.map(f =>
         `<div class="wallet-chip ${selFidelidad.has(f.id) ? 'on' : ''}" onclick="toggleFidelidad('${f.id}')">${f.label}</div>`
       ).join('')}</div>
@@ -174,7 +180,7 @@ async function loadProducts() {
   tbody.innerHTML = '<tr><td colspan="7" class="no-data">Cargando...</td></tr>';
 
   try {
-    const params = new URLSearchParams({ q, cadena, page: currentPage, limit: 20 });
+    const params = new URLSearchParams({ q, cadena, page: currentPage, limit: 20 });      
     const data = await apiFetch(`/api/productos?${params}`);
 
     if (!data.items?.length) {
@@ -186,7 +192,6 @@ async function loadProducts() {
     totalPages = Math.ceil(data.total / data.limit);
     data.items.forEach(item => productCache.set(item.ean, item));
 
-    // Detectar cadenas presentes en los resultados y actualizar encabezados
     const cadenesEnResultados = [...new Set(data.items.flatMap(i => i.cadenas.map(c => c.cadena_id)))].sort();
     if (cadenesEnResultados.join(',') !== activeCadenas.join(',')) {
       activeCadenas = cadenesEnResultados;
@@ -231,7 +236,6 @@ function renderProductRow(item) {
        </span>`;
   };
 
-  // Columnas dinámicas por cadena
   const cadenaCols = activeCadenas.map(id => {
     const c = item.cadenas.find(x => x.cadena_id === id);
     return `<td>${fmtPrice(c)}</td>`;
@@ -241,7 +245,9 @@ function renderProductRow(item) {
     ? `<small class="price-unit">${fmtARS(mejor.precio_por_unidad)}/${mejor.unidad_medida}</small>`
     : '—';
 
-  const inCart = cart.some(c => c.ean === item.ean);
+  const cartItem = cart.find(c => c.ean === item.ean);
+  const inCart = !!cartItem;
+  const cartLabel = cartItem ? `&#x2713; (${cartItem.qty})` : '+';
   return `<tr>
     <td class="ean">${item.ean}</td>
     <td class="nombre">${escHtml(item.nombre)}</td>
@@ -255,25 +261,22 @@ function renderProductRow(item) {
       <button class="btn btn-secondary" style="padding:4px 10px;font-size:12px"
           onclick="openComparativa('${item.ean}')">Ver</button>
       <button class="btn ${inCart ? 'btn-secondary' : 'btn-primary'}" style="padding:4px 10px;font-size:12px;margin-left:4px"
-          onclick="addToCart('${item.ean}')">${inCart ? '✓' : '+'}</button>
+          onclick="addToCart('${item.ean}')">${cartLabel}</button>
     </td>
   </tr>`;
 }
 
-// ---------------------------------------------------------------------------
-// Paginación
-// ---------------------------------------------------------------------------
 function renderPagination(total) {
   const container = document.getElementById('pagination');
   if (totalPages <= 1) { container.innerHTML = ''; return; }
 
-  let html = `<button onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>←</button>`;
+  let html = `<button onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>â†</button>`;
   const start = Math.max(1, currentPage - 2);
   const end = Math.min(totalPages, currentPage + 2);
   for (let i = start; i <= end; i++) {
     html += `<button onclick="goPage(${i})" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
   }
-  html += `<button onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>→</button>`;
+  html += `<button onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>â†’</button>`;
   container.innerHTML = html;
 }
 
@@ -283,9 +286,6 @@ function goPage(page) {
   loadProducts();
 }
 
-// ---------------------------------------------------------------------------
-// Modal de comparativa
-// ---------------------------------------------------------------------------
 async function openComparativa(ean) {
   document.getElementById('modal').classList.add('open');
   document.getElementById('modal-title').textContent = `Comparando EAN: ${ean}`;
@@ -296,7 +296,7 @@ async function openComparativa(ean) {
     document.getElementById('modal-title').textContent = escHtml(data.nombre);
 
     const html = data.cadenas.map(c => `
-      <div class="cadena-card ${c.cadena_id === data.mejor_cadena ? 'best' : ''}">
+      <div class="cadena-card ${c.cadena_id === data.mejor_cadena ? 'best' : ''}">        
         <div class="cadena-header">
           <span class="badge-cadena badge-${c.cadena_id}">${c.cadena_id}</span>
           ${c.cadena_id === data.mejor_cadena ? '<span class="badge-cadena badge-best">✓ Mejor precio</span>' : ''}
@@ -310,7 +310,7 @@ async function openComparativa(ean) {
           <div><div class="price-label">Ahorro</div><div class="price-value" style="color:var(--yellow)">${c.ahorro_pct}%</div></div>
         </div>
         ${c.precio_por_unidad ? `<div class="price-label" style="margin-top:6px">${fmtARS(c.precio_por_unidad)}/${c.unidad_medida}</div>` : ''}
-        ${c.reglas_aplicadas.length ? `<div class="reglas-list">🏷 ${c.reglas_aplicadas.join(' · ')}</div>` : ''}
+        ${c.reglas_aplicadas.length ? `<div class="reglas-list">â“˜ ${c.reglas_aplicadas.join(' Â· ')}</div>` : ''}
       </div>
     `).join('');
     document.getElementById('modal-body').innerHTML = html;
@@ -325,47 +325,37 @@ function closeModal(event) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Harvester status panel
-// ---------------------------------------------------------------------------
 async function loadHarvesterStatus() {
   const el = document.getElementById('harvester-status-content');
   try {
     const log = await apiFetch('/clock/last-log');
-
     const cancelBtn = document.getElementById('cancel-btn');
 
     if (log.message) {
-      // No runs yet
       el.innerHTML = '<span class="h-status-none">Sin ejecuciones registradas. Usá ⚡ para iniciar un ciclo.</span>';
       if (cancelBtn) cancelBtn.style.display = 'none';
       return;
     }
 
-    // Show cancel button only when a cycle is actively running
     if (cancelBtn) cancelBtn.style.display = log.status === 'running' ? 'inline-block' : 'none';
 
     const statusClass = `h-status-${log.status ?? 'none'}`;
     const statusLabel = {
-      running: '⏳ En ejecución',
+      running: 'âŒ› En ejecución',
       completed: '✓ Completado',
       partial: '⚠ Parcial',
-      failed: '✗ Fallido',
+      failed: 'âœ– Fallido',
     }[log.status] ?? log.status ?? '—';
 
     const started = formatDate(log.started_at);
     const finished = log.finished_at ? formatDate(log.finished_at) : '—';
 
     const checkpointsHtml = Object.entries(log.checkpoints ?? {}).map(([cadena, state]) => {
-      const cpClass = state === 'ok' ? 'cp-ok'
-        : state === 'pending' ? 'cp-pending'
-        : 'cp-error';
+      const cpClass = state === 'ok' ? 'cp-ok' : state === 'pending' ? 'cp-pending' : 'cp-error';
       return `<span class="checkpoint ${cpClass}">${cadena}: ${state}</span>`;
     }).join('');
 
-    const errorHtml = log.error
-      ? `<div class="h-error-msg">Error: ${escHtml(log.error)}</div>`
-      : '';
+    const errorHtml = log.error ? `<div class="h-error-msg">Error: ${escHtml(log.error)}</div>` : '';
 
     el.innerHTML = `
       <div class="harvester-row">
@@ -392,41 +382,33 @@ async function loadHarvesterStatus() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Trigger manual
-// ---------------------------------------------------------------------------
 async function triggerManual() {
   const status = document.getElementById('cycle-status');
-  status.textContent = '⏳ Iniciando ciclo...';
+  status.textContent = 'âŒ› Iniciando ciclo...';
   try {
     const data = await apiFetch('/clock/trigger', { method: 'POST' });
-    status.textContent = data.status === 'started'
-      ? '✓ Ciclo iniciado. Puede tardar varios minutos.'
-      : `⚠ ${data.message}`;
+    status.textContent = data.status === 'started' ? '✓ Ciclo iniciado. Puede tardar varios minutos.' : `⚠ ${data.message}`;
     setTimeout(loadHarvesterStatus, 2000);
   } catch {
-    status.textContent = '✗ Error al iniciar el ciclo.';
+    status.textContent = 'âœ– Error al iniciar el ciclo.';
   }
 }
 
 async function cancelScraping() {
   const status = document.getElementById('cycle-status');
-  status.textContent = '⏳ Cancelando...';
+  status.textContent = 'âŒ› Cancelando...';
   try {
     const data = await apiFetch('/clock/cancel', { method: 'POST' });
-    status.textContent = data.status === 'cancelling'
-      ? '⚠ Cancelando — el ciclo se detendrá pronto.'
-      : data.message;
+    status.textContent = data.status === 'cancelling' ? '⚠ Cancelando — el ciclo se detendrá pronto.' : data.message;
     setTimeout(loadHarvesterStatus, 2000);
   } catch {
-    status.textContent = '✗ Error al cancelar.';
+    status.textContent = 'âœ– Error al cancelar.';
   }
 }
 
 // ---------------------------------------------------------------------------
 // Carrito
 // ---------------------------------------------------------------------------
-
 function toggleCart() {
   const panel = document.getElementById('cart-panel');
   const overlay = document.getElementById('cart-overlay');
@@ -435,25 +417,33 @@ function toggleCart() {
 }
 
 function addToCart(ean) {
-  if (cart.some(c => c.ean === ean)) {
-    removeFromCart(ean);
+  const existing = cart.find(c => c.ean === ean);
+  if (existing) {
+    existing.qty += 1;
+    renderCartItems();
+    renderCartCalc();
+    updateCartBadge();
+    _refreshRowButtons(ean, '&#x2713; (' + existing.qty + ')', 'btn btn-secondary');
     return;
   }
   const item = productCache.get(ean);
   if (!item) return;
-  cart.push({ ean: item.ean, nombre: item.nombre, cadenas: item.cadenas });
+  cart.push({ ean: item.ean, nombre: item.nombre, cadenas: item.cadenas, qty: 1 });
   renderCartItems();
   renderCartCalc();
   updateCartBadge();
-  // Refresh row button state
-  const rows = document.querySelectorAll('#products-tbody tr');
-  rows.forEach(row => {
-    const eanCell = row.querySelector('.ean');
-    if (eanCell && eanCell.textContent === ean) {
-      const btn = row.querySelectorAll('button')[1];
-      if (btn) { btn.textContent = '✓'; btn.className = 'btn btn-secondary'; btn.style.cssText = 'padding:4px 10px;font-size:12px;margin-left:4px'; }
-    }
-  });
+  _refreshRowButtons(ean, '&#x2713; (1)', 'btn btn-secondary');
+}
+
+function changeQty(ean, delta) {
+  const item = cart.find(c => c.ean === ean);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) { removeFromCart(ean); return; }
+  renderCartItems();
+  renderCartCalc();
+  updateCartBadge();
+  _refreshRowButtons(ean, '&#x2713; (' + item.qty + ')', 'btn btn-secondary');
 }
 
 function removeFromCart(ean) {
@@ -461,19 +451,22 @@ function removeFromCart(ean) {
   renderCartItems();
   renderCartCalc();
   updateCartBadge();
-  // Refresh row button state
+  _refreshRowButtons(ean, '+', 'btn btn-primary');
+}
+
+function _refreshRowButtons(ean, text, className) {
   const rows = document.querySelectorAll('#products-tbody tr');
   rows.forEach(row => {
     const eanCell = row.querySelector('.ean');
     if (eanCell && eanCell.textContent === ean) {
       const btn = row.querySelectorAll('button')[1];
-      if (btn) { btn.textContent = '+'; btn.className = 'btn btn-primary'; btn.style.cssText = 'padding:4px 10px;font-size:12px;margin-left:4px'; }
+      if (btn) { btn.textContent = text; btn.className = className; }
     }
   });
 }
 
 function updateCartBadge() {
-  document.getElementById('cart-count').textContent = cart.length;
+  document.getElementById('cart-count').textContent = cart.reduce((s, c) => s + c.qty, 0);
 }
 
 function renderCartItems() {
@@ -483,22 +476,25 @@ function renderCartItems() {
     return;
   }
   el.innerHTML = cart.map(item => {
-    const prices = item.cadenas.map(c =>
-      `${c.cadena_id}: ${fmtARS(c.precio_neto)}`
-    ).join(' · ');
+    const prices = item.cadenas.map(c => `${c.cadena_id}: ${fmtARS(c.precio_neto)}`).join(' &middot; ');
     return `<div class="cart-item-row">
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="cart-item-name">${escHtml(item.nombre)}</div>
         <div class="cart-item-prices">${prices}</div>
       </div>
-      <button class="cart-remove" onclick="removeFromCart('${item.ean}')" title="Quitar">✕</button>
+      <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+        <button class="btn btn-secondary" style="padding:2px 8px;font-size:13px;line-height:1" onclick="changeQty('${item.ean}',-1)">&#x2212;</button>
+        <span style="min-width:22px;text-align:center;font-weight:600">${item.qty}</span>
+        <button class="btn btn-secondary" style="padding:2px 8px;font-size:13px;line-height:1" onclick="changeQty('${item.ean}',1)">+</button>
+        <button class="cart-remove" onclick="removeFromCart('${item.ean}')" title="Quitar">&#x2715;</button>
+      </div>
     </div>`;
   }).join('');
 }
 
 function setCartMode(mode) {
   cartMode = mode;
-  document.querySelectorAll('.cart-mode-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.cart-mode-btn').forEach(b => b.classList.remove('active')); 
   document.getElementById(`mode-btn-${mode}`).classList.add('active');
   renderCartCalc();
 }
@@ -509,42 +505,29 @@ function renderCartCalc() {
   if (!cart.length) { calcEl.style.display = 'none'; return; }
   calcEl.style.display = 'block';
 
-  if (cartMode === 'single') {
-    resultEl.innerHTML = _calcSingle();
-  } else if (cartMode === 'split') {
-    resultEl.innerHTML = _calcSplit();
-  } else {
-    resultEl.innerHTML = _calcMax();
-  }
-}
-
-function _allCadenas() {
-  const set = new Set();
-  cart.forEach(item => item.cadenas.forEach(c => set.add(c.cadena_id)));
-  return [...set];
+  if (cartMode === 'single') resultEl.innerHTML = _calcSingle();
+  else if (cartMode === 'split') resultEl.innerHTML = _calcSplit();
+  else resultEl.innerHTML = _calcMax();
 }
 
 function _calcSingle() {
-  const cadenas = _allCadenas();
+  const cadenas = [...new Set(cart.flatMap(item => item.cadenas.map(c => c.cadena_id)))];
   const results = cadenas.map(cadenaId => {
     let total = 0; const missing = [];
     cart.forEach(item => {
       const c = item.cadenas.find(x => x.cadena_id === cadenaId);
-      if (c) total += c.precio_neto;
+      if (c) total += c.precio_neto * (item.qty || 1);
       else missing.push(item.nombre);
     });
     return { cadenaId, total, missing };
-  }).sort((a, b) => {
-    if (a.missing.length !== b.missing.length) return a.missing.length - b.missing.length;
-    return a.total - b.total;
-  });
+  }).sort((a, b) => (a.missing.length - b.missing.length) || (a.total - b.total));
 
   const best = results[0];
   return '<div class="cart-result-title">Total por supermercado</div>' +
     results.map((r, i) => `
       <div class="store-block ${i === 0 ? 'best' : ''}">
         <div class="store-block-header">
-          <span class="store-block-name">${r.cadenaId}${i === 0 ? ' ✓' : ''}</span>
+          <span class="store-block-name">${r.cadenaId}${i === 0 ? ' ✓' : ''}</span>     
           <span class="store-block-total">${r.missing.length ? '?' : fmtARS(r.total)}</span>
         </div>
         ${r.missing.length ? `<div class="store-block-items" style="color:var(--red)">Sin stock: ${r.missing.map(escHtml).join(', ')}</div>` : ''}
@@ -553,12 +536,8 @@ function _calcSingle() {
 }
 
 function _calcSplit() {
-  // With 2 stores: same as max savings but show per-store breakdown
-  // With N stores: find best pair of stores, assign each product to cheaper of the 2
-  const cadenas = _allCadenas();
+  const cadenas = [...new Set(cart.flatMap(item => item.cadenas.map(c => c.cadena_id)))];
   if (cadenas.length <= 2) return _calcMax();
-
-  // Try all pairs
   let bestTotal = Infinity, bestPair = null, bestBreakdown = null;
   for (let i = 0; i < cadenas.length; i++) {
     for (let j = i + 1; j < cadenas.length; j++) {
@@ -568,25 +547,24 @@ function _calcSplit() {
         const opts = item.cadenas.filter(c => pair.includes(c.cadena_id));
         if (!opts.length) return null;
         const best = opts.reduce((a, b) => a.precio_neto <= b.precio_neto ? a : b);
-        total += best.precio_neto;
-        return { nombre: item.nombre, cadenaId: best.cadena_id, precio: best.precio_neto };
+        total += best.precio_neto * (item.qty || 1);
+        return { nombre: item.nombre, cadenaId: best.cadena_id, precio: best.precio_neto * (item.qty || 1), qty: item.qty || 1 };
       });
       if (breakdown.some(b => b === null)) continue;
       if (total < bestTotal) { bestTotal = total; bestPair = pair; bestBreakdown = breakdown; }
     }
   }
-  if (!bestBreakdown) return _calcMax();
-  return _renderMaxBreakdown(bestBreakdown, bestTotal, `Mejor combinación de 2: ${bestPair.join(' + ')}`);
+  return bestBreakdown ? _renderMaxBreakdown(bestBreakdown, bestTotal, `Mejor combinación de 2: ${bestPair.join(' + ')}`) : _calcMax();
 }
 
 function _calcMax() {
   const breakdown = cart.map(item => {
     if (!item.cadenas.length) return null;
     const best = item.cadenas.reduce((a, b) => a.precio_neto <= b.precio_neto ? a : b);
-    return { nombre: item.nombre, cadenaId: best.cadena_id, precio: best.precio_neto };
+    return { nombre: item.nombre, cadenaId: best.cadena_id, precio: best.precio_neto * (item.qty || 1), qty: item.qty || 1 };
   }).filter(Boolean);
   const total = breakdown.reduce((s, b) => s + b.precio, 0);
-  return _renderMaxBreakdown(breakdown, total, 'Ahorro máximo — comprás cada producto donde es más barato');
+  return _renderMaxBreakdown(breakdown, total, 'Ahorro m&aacute;ximo &mdash; compr&aacute;s cada producto donde es m&aacute;s barato');
 }
 
 function _renderMaxBreakdown(breakdown, total, subtitle) {
@@ -602,11 +580,11 @@ function _renderMaxBreakdown(breakdown, total, subtitle) {
         <span class="store-block-name">${cid}</span>
         <span class="store-block-total">${fmtARS(data.total)}</span>
       </div>
-      <div class="store-block-items">${data.items.map(i => escHtml(i.nombre)).join(' · ')}</div>
+      <div class="store-block-items">${data.items.map(i => escHtml(i.nombre) + (i.qty > 1 ? ' &times;' + i.qty : '')).join(' &middot; ')}</div>
     </div>`).join('');
   return `<div class="cart-result-title">${escHtml(subtitle)}</div>
     ${blocks}
-    <div class="cart-grand-total"><span>Total</span><span>${fmtARS(total)}</span></div>`;
+    <div class="cart-grand-total"><span>Total</span><span>${fmtARS(total)}</span></div>`; 
 }
 
 // ---------------------------------------------------------------------------
@@ -636,16 +614,13 @@ function escHtml(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-
 let toastTimeout;
 function showToast(msg, error = false) {
-  let t = document.getElementById('toast');
-  if (!t) {
-    t = document.createElement('div');
-    t.id = 'toast';
-    t.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;font-size:13px;z-index:200;transition:opacity .3s';
-    document.body.appendChild(t);
-  }
+  let t = document.getElementById('toast') || (function() {
+    const el = document.createElement('div'); el.id = 'toast';
+    el.style.cssText = 'position:fixed;bottom:24px;right:24px;padding:10px 18px;border-radius:8px;font-size:13px;z-index:200;transition:opacity .3s';
+    document.body.appendChild(el); return el;
+  })();
   t.textContent = msg;
   t.style.background = error ? '#7f1d1d' : '#14532d';
   t.style.color = error ? '#fca5a5' : '#86efac';
@@ -653,6 +628,12 @@ function showToast(msg, error = false) {
   clearTimeout(toastTimeout);
   toastTimeout = setTimeout(() => { t.style.opacity = '0'; }, 3000);
 }
+function updateClock() {
+  const el = document.getElementById('ar-clock');
+  if (!el) return;
+  el.textContent = new Date().toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+  }) + ' AR';
+}
 
-// Render wallet chips immediately (script is at bottom of body, DOM already ready)
-renderWallet();

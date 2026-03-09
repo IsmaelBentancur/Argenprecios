@@ -1,4 +1,4 @@
-"""
+﻿"""
 Utilidades para validación y normalización de EANs/GTINs.
 """
 
@@ -39,6 +39,11 @@ def is_internal_coto_id(ean: str) -> bool:
     return False
 
 
+# Alias genérico: detecta SKUs internos de cualquier cadena (no solo Coto).
+# Usa validación GS1 check digit — cualquier código que falle es un ID interno.
+is_internal_id = is_internal_coto_id
+
+
 def slugify(text: str, max_len: int = 60) -> str:
     """Convierte un nombre de producto en un slug para URL."""
     # Normalizar unicode (quitar acentos)
@@ -47,3 +52,4 @@ def slugify(text: str, max_len: int = 60) -> str:
     # Lowercase, reemplazar no-alfanuméricos con guion
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")
     return slug[:max_len]
+

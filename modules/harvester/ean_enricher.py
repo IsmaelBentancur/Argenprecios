@@ -1,4 +1,4 @@
-"""
+﻿"""
 EAN Enricher para Coto Digital.
 
 Problema: Coto usa SKUs internos (ej: "00566098") en lugar de GTINs reales.
@@ -25,7 +25,7 @@ from loguru import logger
 from playwright.async_api import async_playwright
 
 from db.client import get_db
-from modules.harvester.ean_utils import is_internal_coto_id, slugify
+from modules.harvester.ean_utils import is_internal_id, slugify
 
 _COTO_BASE = "https://www.cotodigital.com.ar"
 _DETAIL_URL_PATTERN = "{base}/sitios/cdigi/producto/-/{slug}/{product_id}"
@@ -111,7 +111,7 @@ async def _get_pending_eans(db, limit: int) -> list[dict]:
     return [
         {"ean_interno": d["ean"], "nombre": d.get("nombre") or "", "url_detalle": d.get("url_detalle")}
         for d in docs
-        if is_internal_coto_id(d["ean"])
+        if is_internal_id(d["ean"])
     ][:limit]
 
 
@@ -171,7 +171,7 @@ async def enrich_batch(batch_size: int = _BATCH_SIZE) -> dict:
                     },
                     upsert=True,
                 )
-                logger.info(f"[EanEnricher] ✓ {ean_interno} → {gtin}  {nombre[:40]}")
+                logger.info(f"[EanEnricher] ✓ {ean_interno} â†’ {gtin}  {nombre[:40]}")
                 enriched += 1
             else:
                 # Marcar como procesado (sin GTIN) para no reintentar indefinidamente
@@ -184,7 +184,7 @@ async def enrich_batch(batch_size: int = _BATCH_SIZE) -> dict:
                     },
                     upsert=True,
                 )
-                logger.debug(f"[EanEnricher] ✗ {ean_interno} sin GTIN  {nombre[:40]}")
+                logger.debug(f"[EanEnricher] ✖ {ean_interno} sin GTIN  {nombre[:40]}")
                 failed += 1
 
             await asyncio.sleep(_DELAY_SECS)
@@ -195,9 +195,6 @@ async def enrich_batch(batch_size: int = _BATCH_SIZE) -> dict:
         except Exception:
             pass
 
-    await db.coto_mappings.create_index([("ean_interno", 1)], unique=True)
-    await db.coto_mappings.create_index([("gtin", 1)])
-
     result = {"processed": len(pending), "enriched": enriched, "failed": failed}
     logger.info(f"[EanEnricher] {result}")
     return result
@@ -205,3 +202,4 @@ async def enrich_batch(batch_size: int = _BATCH_SIZE) -> dict:
 
 if __name__ == "__main__":
     asyncio.run(enrich_batch())
+

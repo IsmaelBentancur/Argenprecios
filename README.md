@@ -1,4 +1,4 @@
-# 🛒 Argenprecios — Sistema de Inteligencia de Precios en Tiempo Real
+﻿# 🛒 Argenprecios — Sistema de Inteligencia de Precios en Tiempo Real
 
 Sistema de scraping, comparación y gestión de precios minoristas en Argentina.
 
@@ -62,7 +62,7 @@ playwright install chromium
 python scripts/seed_demo.py
 ```
 
-Esto carga 10 productos de canasta básica con precios de Coto y Carrefour,
+Esto carga 10 productos de canasta básica con precios de Coto y ---,
 inventario de ejemplo y reglas de descuento bancarias para poder usar el
 Dashboard inmediatamente sin esperar el scraping real.
 
@@ -83,23 +83,23 @@ Abrí tu navegador en: **http://localhost:8000**
 ### Pestaña 📊 Comparador de Precios
 - Configurá tu **billetera** (tarjetas y programas de fidelidad que usás)
 - Buscá productos por nombre
-- Filtrá por cadena (Coto / Carrefour)
+- Filtrá por cadena (Coto / ---)
 - Hacé clic en **"Ver detalle"** para comparar precios con tus descuentos aplicados
 - Botón **"⚡ Disparar scraping ahora"** para ejecutar el Harvester manualmente
 
-### Pestaña 📦 Inventario
+### Pestaña ðŸ“¦ Inventario
 - Agregá tus productos con costo, precio de venta y stock mínimo
 - El sistema muestra tu **margen de ganancia** y lo compara con el mercado
 - Alertas automáticas:
-  - 🟢 Oportunidad de compra si el mercado vende más barato que tu costo
-  - 🔴 Alerta si el mercado está >15% por debajo de tu precio de venta
-  - 🟡 Atención si la brecha es entre 5% y 15%
+  - ðŸŸ¢ Oportunidad de compra si el mercado vende más barato que tu costo
+  - ðŸ”´ Alerta si el mercado está >15% por debajo de tu precio de venta
+  - ðŸŸ¡ Atención si la brecha es entre 5% y 15%
 
 ### Pestaña 🛒 POS — Punto de Venta
 - Escribí o escaneá el EAN del producto
 - El sistema muestra: tu precio, tu margen, stock disponible y el mejor precio del mercado
 - Agregá ítems al carrito y seleccioná el medio de pago
-- Confirmá la venta → el stock se descuenta automáticamente
+- Confirmá la venta â†’ el stock se descuenta automáticamente
 - Reporte del día con total recaudado y ranking de productos más vendidos
 
 ---
@@ -130,8 +130,8 @@ Abrí tu navegador en: **http://localhost:8000**
 
 ```env
 # Límite de scrapers simultáneos (ajustar según hardware)
-MAX_CONCURRENT_SCRAPERS=2    # VPS 2GB RAM
-MAX_CONCURRENT_SCRAPERS=12   # PC de escritorio
+MAX_CONCURRENT_BROWSERS=2`nMAX_CONCURRENT_PAGES=3    # VPS 2GB RAM
+MAX_CONCURRENT_BROWSERS=4`nMAX_CONCURRENT_PAGES=12   # PC de escritorio
 
 # Horarios de scraping automático (hora Argentina)
 SCHEDULE_HOUR_1=6            # 06:00 AM
@@ -151,34 +151,34 @@ MAX_RETRIES=3
 
 ```
 argenprecios/
-├── main.py                          # Punto de entrada
-├── docker-compose.yml               # MongoDB
-├── requirements.txt
-├── .env                             # Tu configuración (no commitear)
-├── config/settings.py               # Variables de entorno
-├── db/client.py                     # Conexión MongoDB + índices
-├── scripts/
-│   └── seed_demo.py                 # Datos de ejemplo
-├── static/
-│   ├── index.html                   # Dashboard
-│   └── app.js                       # Lógica frontend
-└── modules/
-    ├── clock/scheduler.py           # Módulo 1: Planificador
-    ├── harvester/
-    │   ├── adapters/
-    │   │   ├── base_adapter.py      # Base scraper
-    │   │   ├── coto_adapter.py      # Adaptador Coto
-    │   │   └── carrefour_adapter.py # Adaptador Carrefour (VTEX)
-    │   ├── models.py                # ProductData
-    │   └── user_agents.py           # Rotación de User-Agents
-    ├── promo_engine/
-    │   ├── models.py                # ReglaDescuento
-    │   └── parser.py                # Parser NLP/Regex de promos
-    ├── brain/calculator.py          # Módulo 4: Inteligencia de precios
-    ├── operation/
-    │   ├── inventory.py             # CRUD inventario + alertas
-    │   └── pos.py                   # POS: ventas + reportes
-    └── control/__init__.py          # Módulo 6: API REST completa
+â”œâ”€â”€ main.py                          # Punto de entrada
+â”œâ”€â”€ docker-compose.yml               # MongoDB
+â”œâ”€â”€ requirements.txt
+â”œâ”€â”€ .env                             # Tu configuración (no commitear)
+â”œâ”€â”€ config/settings.py               # Variables de entorno
+â”œâ”€â”€ db/client.py                     # Conexión MongoDB + índices
+â”œâ”€â”€ scripts/
+â”‚   â””â”€â”€ seed_demo.py                 # Datos de ejemplo
+â”œâ”€â”€ static/
+â”‚   â”œâ”€â”€ index.html                   # Dashboard
+â”‚   â””â”€â”€ app.js                       # Lógica frontend
+â””â”€â”€ modules/
+    â”œâ”€â”€ clock/scheduler.py           # Módulo 1: Planificador
+    â”œâ”€â”€ harvester/
+    â”‚   â”œâ”€â”€ adapters/
+    â”‚   â”‚   â”œâ”€â”€ base_adapter.py      # Base scraper
+    â”‚   â”‚   â”œâ”€â”€ coto_adapter.py      # Adaptador Coto
+    â”‚   â”‚   â””â”€â”€ ---_adapter.py # Adaptador --- (VTEX)
+    â”‚   â”œâ”€â”€ models.py                # ProductData
+    â”‚   â””â”€â”€ user_agents.py           # Rotación de User-Agents
+    â”œâ”€â”€ promo_engine/
+    â”‚   â”œâ”€â”€ models.py                # ReglaDescuento
+    â”‚   â””â”€â”€ parser.py                # Parser NLP/Regex de promos
+    â”œâ”€â”€ brain/calculator.py          # Módulo 4: Inteligencia de precios
+    â”œâ”€â”€ operation/
+    â”‚   â”œâ”€â”€ inventory.py             # CRUD inventario + alertas
+    â”‚   â””â”€â”€ pos.py                   # POS: ventas + reportes
+    â””â”€â”€ control/__init__.py          # Módulo 6: API REST completa
 ```
 
 ---
@@ -213,3 +213,5 @@ python main.py
 - [ ] Exportación de reportes a Excel/PDF
 - [ ] Autenticación de usuario para el Dashboard
 - [ ] Modo multi-local (varios puntos de venta)
+
+

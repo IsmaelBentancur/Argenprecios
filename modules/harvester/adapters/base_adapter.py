@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Modulo 2 - The Harvester
 BaseAdapter: Clase abstracta que define el contrato para todos los adaptadores.
@@ -51,9 +51,12 @@ class BaseAdapter(ABC):
                 total_saved = sum(results)
             finally:
                 try: await browser.close()
-                except: pass
+                except Exception as exc: logger.debug(f"[{self.cadena_id}] browser.close(): {exc}")
 
-        logger.info(f"[{self.cadena_id}] Total guardados/actualizados: {total_saved}")
+        if total_saved == 0:
+            logger.error(f"[{self.cadena_id}] CRíTICO: 0 productos capturados. Verificar selectores o disponibilidad del sitio.")
+        else:
+            logger.info(f"[{self.cadena_id}] Total guardados/actualizados: {total_saved}")
         return total_saved
 
     async def _process_category_with_semaphore(self, browser: Browser, url: str) -> int:
@@ -72,6 +75,14 @@ class BaseAdapter(ABC):
             args=["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-gpu"]
         )
 
+    # Cookie vtex_segment para forzar precios de Buenos Aires (sc=1, ARG, es-AR, ARS)
+    # JSON: {"ecommerce_rules_cache_render":true,"sc":"1","cultureInfo":"es-AR",
+    #        "currencyCode":"ARS","currencySymbol":"$","country":"ARG"}
+    _VTEX_SEGMENT_COOKIE = (
+        "eyJlY29tbWVyY2VfcnVsZXNfY2FjaGVfcmVuZGVyIjp0cnVlLCJzYyI6IjEiLCJjdWx0dXJlSW5mbyI6ImVz"
+        "LUFSIiwiY3VycmVuY3lDb2RlIjoiQVJTIiwiY3VycmVuY3lTeW1ib2wiOiIkIiwiY291bnRyeSI6IkFSRyJ9"
+    )
+
     async def _new_context(self, browser: Browser) -> BrowserContext:
         ua = get_random_user_agent()
         vp = get_random_viewport()
@@ -82,8 +93,27 @@ class BaseAdapter(ABC):
             timezone_id="America/Argentina/Buenos_Aires",
             ignore_https_errors=True,
         )
-        await ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        # playwright-stealth: oculta indicadores de automatizacion del navegador.
+        # Se aplica al contexto para que todas las paginas hereden el stealth.
+        try:
+            from playwright_stealth import stealth_async
+            await stealth_async(ctx)
+        except Exception:
+            # Fallback manual si la libreria no esta disponible
+            await ctx.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         return ctx
+
+    async def _set_vtex_region(self, page: "Page", domain: str) -> None:
+        """Inyecta la cookie vtex_segment para forzar precios de Buenos Aires."""
+        try:
+            await page.context.add_cookies([{
+                "name": "vtex_segment",
+                "value": self._VTEX_SEGMENT_COOKIE,
+                "domain": domain,
+                "path": "/",
+            }])
+        except Exception:
+            pass
 
     async def _block_resources(self, page: Page) -> None:
         async def _handler(route: Route) -> None:
@@ -100,15 +130,40 @@ class BaseAdapter(ABC):
             ctx = await self._new_context(browser)
             page = await ctx.new_page()
             await self._block_resources(page)
+            
+            # Inyectar regionalización si es VTEX (basado en dominio)
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc
+            if "jumbo" in domain or "disco" in domain or "vea" in domain or "diaonline" in domain:
+                await self._set_vtex_region(page, domain)
 
             logger.debug(f"[{self.cadena_id}] Abriendo: {url}")
-            await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-            await self._human_behavior(page)
 
             batch: list[dict] = []
-            async for product in self.parse_product_list(page):
-                if not product.is_valid(): continue
-                batch.append(product.to_dict())
+
+            async def _navigate():
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                    await self._human_behavior(page)
+                finally:
+                    # SIEMPRE cerrar la pagina, incluso si goto() o human_behavior() fallan.
+                    # Sin esto, page.is_closed() nunca es True y el generador VTEX
+                    # queda en loop infinito esperando la cola (bug en ChangoMas).
+                    try:
+                        await page.close()
+                    except Exception:
+                        pass
+
+            # Lanzar navegacion como task concurrente para que el generador pueda
+            # registrar su listener (page.on) ANTES de que los requests de red ocurran.
+            nav_task = asyncio.ensure_future(_navigate())
+            try:
+                async for product in self.parse_product_list(page):
+                    if not product.is_valid():
+                        continue
+                    batch.append(product.to_dict())
+            finally:
+                await nav_task
 
             if batch:
                 saved = await self._save_batch(batch)
@@ -118,7 +173,7 @@ class BaseAdapter(ABC):
         finally:
             if ctx:
                 try: await ctx.close()
-                except: pass
+                except Exception as exc: logger.debug(f"[{self.cadena_id}] ctx.close(): {exc}")
         return saved
 
     async def _save_batch(self, products: list[dict]) -> int:
@@ -156,7 +211,8 @@ class BaseAdapter(ABC):
                     },
                     "$push": {
                         "capturas": {
-                            "precio_lista": p["precio_lista"], "precio_oferta": p["precio_oferta"], "ts": p["captured_at"],
+                            "$each": [{"precio_lista": p["precio_lista"], "precio_oferta": p["precio_oferta"], "ts": p["captured_at"]}],
+                            "$slice": -20,  # conservar solo las ultimas 20 capturas
                         }
                     },
                     "$setOnInsert": {"bucket_id": bucket_id, "captured_at": p["captured_at"]},
@@ -218,19 +274,27 @@ class BaseAdapter(ABC):
                         for key in ("gtin13", "gtin8", "gtin", "sku"):
                             val = str(item.get(key, ""))
                             if len(val) in (8, 13) and val.isdigit(): return val
-            except: continue
+            except Exception: continue
         return None
 
     @staticmethod
     async def _human_behavior(page: Page) -> None:
         await asyncio.sleep(random.uniform(1.0, 3.0))
-        await page.evaluate("""async () => {
-            await new Promise(resolve => {
-                let total = 0; const dist = 400;
-                const timer = setInterval(() => {
-                    window.scrollBy(0, dist); total += dist;
-                    if (total >= document.body.scrollHeight) { clearInterval(timer); resolve(); }
-                }, 200);
-            });
-        }""")
+        try:
+            await page.evaluate("""async () => {
+                await new Promise(resolve => {
+                    let total = 0; const dist = 400;
+                    const timer = setInterval(() => {
+                        window.scrollBy(0, dist); total += dist;
+                        if (total >= document.body.scrollHeight) { clearInterval(timer); resolve(); }
+                    }, 200);
+                });
+            }""")
+        except Exception:
+            pass
         await asyncio.sleep(random.uniform(1.0, 2.0))
+
+
+
+
+

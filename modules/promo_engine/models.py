@@ -31,7 +31,7 @@ class DiaSemana(str, Enum):
 
 @dataclass
 class ReglaDescuento:
-    cadena_id: str                           # "COTO", "CARREFOUR", etc.
+    cadena_id: str                           # "COTO", "JUMBO", etc.
     tipo: TipoPromo
     texto_original: str                      # Texto tal como aparece en el sitio
 
@@ -51,7 +51,7 @@ class ReglaDescuento:
     tope_reintegro: float | None = None      # ARS máximo de reintegro
 
     # Condiciones de fidelidad
-    programa_fidelidad: str | None = None    # "Comunidad Coto", "Mi Carrefour"
+    programa_fidelidad: str | None = None    # "Comunidad Coto", "Jumbo+", etc.
 
     # Vigencia
     fecha_inicio: datetime | None = None

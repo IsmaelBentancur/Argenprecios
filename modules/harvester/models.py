@@ -19,7 +19,7 @@ def _isoweek() -> str:
 class ProductData:
     ean: str                          # GTIN-13 u 8 - clave primaria obligatoria
     nombre: str
-    cadena_id: str                    # Ej: "COTO", "CARREFOUR"
+    cadena_id: str                    # Ej: "COTO", "JUMBO"
     precio_lista: float
     precio_oferta: float | None
     stock_disponible: bool
@@ -51,3 +51,4 @@ class ProductData:
         ean_ok = len(self.ean) in (8, 13) and self.ean.isdigit()
         precio_ok = self.precio_lista > 0
         return ean_ok and precio_ok
+

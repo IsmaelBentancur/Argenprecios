@@ -46,6 +46,8 @@ logger.add(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    import os
+    os.makedirs("logs", exist_ok=True)
     logger.info("=== Argenprecios iniciando ===")
     await init_indexes()
 
@@ -58,7 +60,7 @@ async def lifespan(app: FastAPI):
         f"{settings.schedule_hour_2:02d}:00 (hora Argentina)"
     )
     logger.info(
-        f"[Clock] Concurrencia máxima: {settings.max_concurrent_scrapers} scrapers"
+        f"[Clock] Concurrencia: {settings.max_concurrent_browsers} navegadores, {settings.max_concurrent_pages} páginas totales"
     )
 
     yield
@@ -99,7 +101,13 @@ async def dashboard():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    from db.client import get_client
+    try:
+        await get_client().admin.command("ping")
+        db_status = "ok"
+    except Exception as exc:
+        db_status = f"error: {exc}"
+    return {"status": "ok" if db_status == "ok" else "degraded", "db": db_status, "version": "0.1.0"}
 
 
 @app.post("/clock/trigger", dependencies=[Depends(require_api_key)])
@@ -150,3 +158,4 @@ if __name__ == "__main__":
         reload=False,
         log_level="info",
     )
+

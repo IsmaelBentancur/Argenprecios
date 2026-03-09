@@ -1,4 +1,4 @@
-"""
+﻿"""
 Módulo 3 — The Promo Engine
 Parser NLP/Regex: transforma texto libre de promociones en ReglaDescuento estructurada.
 
@@ -23,11 +23,11 @@ from modules.promo_engine.models import DiaSemana, ReglaDescuento, TipoPromo
 _PCT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*%")
 _TOPE_RE = re.compile(r"tope\s*\$?\s*([\d.,]+)", re.IGNORECASE)
 
-_MULTI_3X2 = re.compile(r"3\s*[xX×]\s*2", re.IGNORECASE)
+_MULTI_3X2 = re.compile(r"3\s*[xX]\s*2", re.IGNORECASE)
 _MULTI_2ND = re.compile(
     r"(?:2da?|segunda)\s+unidad\s+al\s+(\d+(?:[.,]\d+)?)\s*%", re.IGNORECASE
 )
-_MULTI_NXM = re.compile(r"(\d+)\s*[xX×]\s*(\d+)", re.IGNORECASE)
+_MULTI_NXM = re.compile(r"(\d+)\s*[xX]\s*(\d+)", re.IGNORECASE)
 
 _DIAS: dict[str, DiaSemana] = {
     "lunes": DiaSemana.LUNES,
@@ -45,13 +45,20 @@ _BANCOS: list[str] = [
     "Banco Nación", "Banco Provincia", "Banco Ciudad", "Banco Galicia",
     "Banco Santander", "Banco BBVA", "Banco HSBC", "Banco Macro",
     "Banco Supervielle", "Banco Patagonia", "Banco Hipotecario",
-    "Banco Comafi", "ICBC", "Brubank", "Mercado Pago", "Naranja X",
+    "Banco Comafi", "Banco Credicoop", "Banco Córdoba", "Bancor",
+    "ICBC", "Brubank", "Mercado Pago", "Naranja X",
     "Ualá", "Personal Pay", "Cuenta DNI", "MODO", "BUEPP",
+    "Prex", "Lemon",
+    # Nombres cortos que aparecen en banners sin "Banco"
+    "Macro", "Supervielle", "Galicia", "Santander", "BBVA",
+    "Patagonia", "Hipotecario", "Comafi", "Credicoop",
 ]
 
 _TARJETAS: list[str] = [
-    "Visa", "Mastercard", "American Express", "Amex", "Cabal",
-    "Naranja", "Tarjeta Shopping", "Tarjeta Nevada",
+    "Visa",
+    "Mastercard", "Master",
+    "American Express", "Amex",
+    "Cabal", "Naranja", "Tarjeta Shopping", "Tarjeta Nevada",
 ]
 
 _MEDIOS: dict[str, str] = {
@@ -62,14 +69,20 @@ _MEDIOS: dict[str, str] = {
 
 _FIDELIDAD: dict[str, str] = {
     "comunidad coto": "Comunidad Coto",
-    "mi carrefour": "Mi Carrefour",
     "club la nación": "Club La Nación",
     "club la nacion": "Club La Nación",
     "jumbo+": "Jumbo+",
+    "jumbo mas": "Jumbo+",
+    "jumbo más": "Jumbo+",
     "disco +": "Disco+",
+    "disco mas": "Disco+",
+    "disco más": "Disco+",
     "vea más": "Vea Más",
+    "vea mas": "Vea Más",
     "clarin 365": "Clarín 365",
+    "clarín 365": "Clarín 365",
     "365": "Clarín 365",
+    "club dia": "Club Dia",
     "mas online": "ChangoMas",
 }
 
@@ -277,3 +290,5 @@ def _find_dia(texto_lower: str) -> DiaSemana | None:
         if key in texto_lower:
             return dia
     return None
+
+

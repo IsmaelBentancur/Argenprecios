@@ -109,7 +109,7 @@ class TestReglaAplica(unittest.TestCase):
 
     def test_fidelidad_con_programa_incorrecto(self):
         regla = self._make_regla(TipoPromo.FIDELIDAD, programa="Comunidad Coto")
-        self.assertFalse(_regla_aplica(regla, tarjetas=None, programas=["Mi Carrefour"]))
+        self.assertFalse(_regla_aplica(regla, tarjetas=None, programas=["Jumbo+"]))
 
     def test_fidelidad_case_insensitive(self):
         regla = self._make_regla(TipoPromo.FIDELIDAD, programa="Comunidad Coto")

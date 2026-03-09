@@ -10,32 +10,29 @@ from typing import Any
 from loguru import logger
 
 from modules.harvester.adapters.coto_adapter import CotoAdapter
-from modules.harvester.adapters.carrefour_adapter import CarrefourAdapter
 from modules.harvester.adapters.vtex_master_adapter import (
     JumboAdapter, DiscoAdapter, VeaAdapter, DiaAdapter,
-    ChangomasAdapter, FarmacityAdapter, JosimarAdapter,
-    LibertadAdapter, ToledoAdapter, ElNeneAdapter, CordiezAdapter,
+    ChangomasAdapter, JosimarAdapter,
+    LibertadAdapter, ToledoAdapter, CordiezAdapter,
+    CooperativaObreraAdapter, LaAnonimaAdapter,
 )
 
-# Registro de adaptadores disponibles.
-# STAGING: Las cadenas nuevas estan inactivas en MongoDB (activo: False en comercios_config).
-# Para activar una cadena sin deploy:
-#   db.comercios_config.updateOne({cadena_id: "JUMBO"}, {$set: {activo: true}})
+# Cadenas activas según lista aprobada por Isma (2026-03-09):
+# Coto, Día, Jumbo, Disco, Vea, MásOnline, La Anónima, Cooperativa Obrera,
+# Josimar, Toledo, Cordiez, Hipermercado Libertad
 _ADAPTER_REGISTRY: dict[str, type] = {
     "COTO": CotoAdapter,
-    "CARREFOUR": CarrefourAdapter,
-    # Staging - VTEX (Sprint 1/2)
     "JUMBO": JumboAdapter,
     "DISCO": DiscoAdapter,
     "VEA": VeaAdapter,
     "DIA": DiaAdapter,
     "CHANGOMAS": ChangomasAdapter,
-    "FARMACITY": FarmacityAdapter,
     "JOSIMAR": JosimarAdapter,
     "LIBERTAD": LibertadAdapter,
     "TOLEDO": ToledoAdapter,
-    "ELNENE": ElNeneAdapter,
     "CORDIEZ": CordiezAdapter,
+    "LACOOPE": CooperativaObreraAdapter,
+    "LAANONIMA": LaAnonimaAdapter,
 }
 
 
@@ -54,3 +51,4 @@ async def run_harvester(cadena: dict[str, Any], semaphore: asyncio.Semaphore) ->
     logger.info(f"[Harvester] Iniciando adaptador: {cadena_id}")
     adapter = adapter_cls(semaphore=semaphore)
     return await adapter.run()
+

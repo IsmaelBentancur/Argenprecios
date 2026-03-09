@@ -15,6 +15,8 @@ def get_client() -> AsyncIOMotorClient:
         _client = AsyncIOMotorClient(
             settings.mongo_uri,
             serverSelectionTimeoutMS=5000,
+            socketTimeoutMS=30000,
+            connectTimeoutMS=10000,
         )
     return _client
 
@@ -26,11 +28,11 @@ def get_db() -> AsyncIOMotorDatabase:
 async def init_indexes() -> None:
     db = get_db()
 
-    # scraping_logs: index by execution time
+    # scraping_logs: execution_id es la clave de busqueda en cada checkpoint/close
     await db.scraping_logs.create_indexes([
+        IndexModel([("execution_id", ASCENDING)], unique=True),  # update_one por ciclo
         IndexModel([("started_at", DESCENDING)]),
         IndexModel([("status", ASCENDING)]),
-        IndexModel([("cadena_id", ASCENDING)]),
     ])
 
     # historial_precios: TTL + query indexes
@@ -44,8 +46,36 @@ async def init_indexes() -> None:
         IndexModel([("nombre", "text")]),                             # busqueda por nombre
     ])
 
-    # reglas_descuento: removido por solicitud del usuario (verificacion de datos)
-    # await db.reglas_descuento.create_indexes([...])
+    # reglas_descuento: indexes para upsert por clave única
+    await db.reglas_descuento.create_indexes([
+        IndexModel([("cadena_id", ASCENDING), ("tipo", ASCENDING)]),
+        IndexModel([("cadena_id", ASCENDING), ("banco", ASCENDING)]),
+        IndexModel([("cadena_id", ASCENDING), ("programa_fidelidad", ASCENDING)]),
+        IndexModel([("cadena_id", ASCENDING), ("ean", ASCENDING)]),  # filtro compuesto frecuente
+        IndexModel([("ean", ASCENDING)]),
+    ])
+
+    # coto_mappings: EAN interno → GTIN real (lookup en sync y enricher)
+    await db.coto_mappings.create_indexes([
+        IndexModel([("ean_interno", ASCENDING)], unique=True),
+        IndexModel([("gtin", ASCENDING)]),
+    ])
+
+    # productos_vigentes: colección pre-agregada para frontend O(1)
+    await db.productos_vigentes.create_indexes([
+        IndexModel([("ean", ASCENDING)], unique=True),
+        IndexModel([("nombre", "text")]),
+        IndexModel([("mejor_cadena", ASCENDING)]),
+        IndexModel([("ultima_actualizacion", DESCENDING)]),  # pruning query en sync.py
+    ])
+
+    # price_alerts: variaciones de precio entre ciclos
+    await db.price_alerts.create_indexes([
+        IndexModel([("ean", ASCENDING), ("cadena_id", ASCENDING), ("ciclo_ts", DESCENDING)], unique=True),
+        IndexModel([("tipo", ASCENDING)]),
+        IndexModel([("detectado_en", DESCENDING)]),
+        IndexModel([("variacion_pct", ASCENDING)]),
+    ])
 
     # comercios_config: simple lookup
     await db.comercios_config.create_indexes([
@@ -61,3 +91,4 @@ async def close_client() -> None:
     if _client:
         _client.close()
         _client = None
+

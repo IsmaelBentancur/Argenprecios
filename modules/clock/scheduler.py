@@ -1,11 +1,15 @@
+﻿# -*- coding: utf-8 -*-
 """
-Módulo 1: The Clock — Orquestador y Planificador
+Modulo 1: The Clock - Orquestador y Planificador
 Responsabilidades:
   - Disparar scraping global a las 06:00 y 12:00 (hora Argentina)
   - Prevenir ejecuciones solapadas mediante asyncio.Lock
-  - Gestionar reintentos automáticos cada RETRY_INTERVAL_MINUTES
-  - Registrar cada ciclo en MongoDB (colección scraping_logs)
+  - Gestionar reintentos automaticos cada RETRY_INTERVAL_MINUTES
+  - Registrar cada ciclo en MongoDB (coleccion scraping_logs)
   - Exponer trigger manual para el Dashboard
+  - Ejecutar cadenas en PARALELO con doble semaforo:
+      browser_semaphore: cuantos Chromium corren a la vez (pesado)
+      page_semaphore:    cuantas paginas de categoria se procesan a la vez (liviano)
 """
 
 import asyncio
@@ -20,17 +24,16 @@ from loguru import logger
 from config.settings import settings
 from db.client import get_db
 
-# Zona horaria Argentina
 ARGENTINA_TZ = "America/Argentina/Buenos_Aires"
 
-# Lock global: impide solapamiento de ciclos
 _scraping_lock = asyncio.Lock()
-
-# Evento de cancelación: se activa vía /clock/cancel para detener el ciclo activo
 _cancel_event = asyncio.Event()
 
-# Semáforo global: limita pestañas/contextos concurrentes del Harvester
-scraping_semaphore = asyncio.Semaphore(settings.max_concurrent_scrapers)
+# Semaforo de browsers: cuantos Chromium arrancan en paralelo (recurso pesado)
+browser_semaphore = asyncio.Semaphore(settings.max_concurrent_browsers)
+
+# Semaforo de paginas: paginas de categoria concurrentes entre todos los browsers
+page_semaphore = asyncio.Semaphore(settings.max_concurrent_pages)
 
 
 # ---------------------------------------------------------------------------
@@ -42,13 +45,11 @@ async def _create_log(execution_id: str, cadenas: list[str]) -> None:
         "execution_id": execution_id,
         "started_at": datetime.now(tz=timezone.utc),
         "cadenas": cadenas,
-        "checkpoints": {},          # {cadena_id: "pending"|"ok"|"error"}
+        "checkpoints": {c: "pending" for c in cadenas},
         "status": "running",
         "finished_at": None,
         "error": None,
     }
-    for cadena in cadenas:
-        doc["checkpoints"][cadena] = "pending"
     await get_db().scraping_logs.insert_one(doc)
     logger.debug(f"[Clock] Log creado: {execution_id}")
 
@@ -63,19 +64,13 @@ async def _update_checkpoint(execution_id: str, cadena_id: str, status: str) -> 
 async def _close_log(execution_id: str, status: str, error: str | None = None) -> None:
     await get_db().scraping_logs.update_one(
         {"execution_id": execution_id},
-        {
-            "$set": {
-                "status": status,
-                "finished_at": datetime.now(tz=timezone.utc),
-                "error": error,
-            }
-        },
+        {"$set": {"status": status, "finished_at": datetime.now(tz=timezone.utc), "error": error}},
     )
     logger.info(f"[Clock] Ciclo {execution_id} finalizado con estado: {status}")
 
 
 # ---------------------------------------------------------------------------
-# Lógica de obtención de cadenas activas
+# Logica de obtencion de cadenas activas
 # ---------------------------------------------------------------------------
 
 async def _get_active_cadenas() -> list[dict[str, Any]]:
@@ -89,17 +84,14 @@ async def _get_active_cadenas() -> list[dict[str, Any]]:
 
 async def _run_scraping_cycle(triggered_by: str = "scheduler") -> None:
     if _scraping_lock.locked():
-        logger.warning(
-            "[Clock] Ciclo anterior aún en ejecución. "
-            "Se cancela el nuevo disparo para evitar solapamiento."
-        )
+        logger.warning("[Clock] Ciclo anterior aun en ejecucion. Se cancela el nuevo disparo.")
         return
 
     _cancel_event.clear()
 
     async with _scraping_lock:
         execution_id = str(uuid4())
-        logger.info(f"[Clock] ▶ Iniciando ciclo | id={execution_id} | origen={triggered_by}")
+        logger.info(f"[Clock] Iniciando ciclo | id={execution_id} | origen={triggered_by}")
 
         cadenas = await _get_active_cadenas()
         if not cadenas:
@@ -109,41 +101,53 @@ async def _run_scraping_cycle(triggered_by: str = "scheduler") -> None:
         cadena_ids = [c["cadena_id"] for c in cadenas]
         await _create_log(execution_id, cadena_ids)
 
-        failed: list[str] = []
+        # Fase 1: Scraping paralelo de todas las cadenas
+        logger.info(
+            f"[Clock] Fase 1: scraping paralelo de {len(cadenas)} cadenas "
+            f"(max_browsers={settings.max_concurrent_browsers}, max_pages={settings.max_concurrent_pages})"
+        )
+        results = await asyncio.gather(
+            *[_run_with_retries(execution_id, cadena) for cadena in cadenas],
+            return_exceptions=True,
+        )
 
-        for cadena in cadenas:
-            if _cancel_event.is_set():
-                logger.info("[Clock] Ciclo cancelado por usuario entre cadenas.")
-                break
-            success = await _run_with_retries(execution_id, cadena)
-            if not success:
+        failed: list[str] = []
+        for cadena, result in zip(cadenas, results):
+            if isinstance(result, Exception) or not result:
                 failed.append(cadena["cadena_id"])
 
         if _cancel_event.is_set():
             await _close_log(execution_id, "cancelled", "Cancelado manualmente.")
-            logger.info(f"[Clock] Ciclo {execution_id} marcado como cancelado.")
             return
 
-        # Fase 2: Promo Engine — desactivado hasta implementación estable
-        # cadenas_ok = [c for c in cadenas if c["cadena_id"] not in failed]
-        # if cadenas_ok:
-        #     logger.info(f"[Clock] Iniciando Promo Engine para {len(cadenas_ok)} cadenas")
-        #     await _run_promo_engine_phase(cadenas_ok)
+        # Fase 2: Promo Engine
+        cadenas_ok = [c for c in cadenas if c["cadena_id"] not in failed]
+        if cadenas_ok:
+            logger.info(f"[Clock] Fase 2: Promo Engine para {len(cadenas_ok)} cadenas")
+            await _run_promo_engine_phase(cadenas_ok)
 
-        # Fase 3: Sincronización de productos_vigentes (pre-agregación para O(1) en frontend)
+        # Fase 3: Sincronizacion de productos_vigentes
         if not _cancel_event.is_set():
             try:
                 from modules.brain.sync import sync_productos_vigentes
                 count = await sync_productos_vigentes()
                 logger.info(f"[Clock] Fase 3 completa: {count} productos vigentes sincronizados.")
             except Exception as exc:
-                logger.error(f"[Clock] Fase 3 (sync_productos_vigentes) falló: {exc}")
+                logger.error(f"[Clock] Fase 3 (sync) fallo: {exc}")
+
+        # Fase 4: Price Change Tracker
+        if not _cancel_event.is_set():
+            try:
+                from modules.brain.tracker import detectar_variaciones
+                alertas = await detectar_variaciones()
+                logger.info(f"[Clock] Fase 4 completa: {alertas} variaciones de precio detectadas.")
+            except Exception as exc:
+                logger.error(f"[Clock] Fase 4 (tracker) fallo: {exc}")
 
         final_status = "completed" if not failed else "partial"
         error_msg = f"Fallaron: {failed}" if failed else None
         await _close_log(execution_id, final_status, error_msg)
-
-        logger.info(f"[Clock] ✔ Ciclo completo. Estado: {final_status}")
+        logger.info(f"[Clock] Ciclo completo. Estado: {final_status}")
 
 
 async def _run_with_retries(execution_id: str, cadena: dict[str, Any]) -> bool:
@@ -152,56 +156,47 @@ async def _run_with_retries(execution_id: str, cadena: dict[str, Any]) -> bool:
 
     while attempt < settings.max_retries:
         attempt += 1
-        logger.info(f"[Clock] → {cadena_id} | intento {attempt}/{settings.max_retries}")
-
+        logger.info(f"[Clock] -> {cadena_id} | intento {attempt}/{settings.max_retries}")
         try:
-            await _dispatch_harvester(cadena)
+            count = await _dispatch_harvester(cadena)
+            if count == 0:
+                logger.error(f"[Clock] {cadena_id} finalizó con 0 productos.")
+                await _update_checkpoint(execution_id, cadena_id, "empty")
+                # Un run con 0 productos se considera fallo para el orquestador
+                return False
             await _update_checkpoint(execution_id, cadena_id, "ok")
             return True
-
         except Exception as exc:
-            logger.error(f"[Clock] ✗ {cadena_id} falló (intento {attempt}): {exc}")
+            logger.error(f"[Clock] {cadena_id} fallo (intento {attempt}): {exc}")
             await _update_checkpoint(execution_id, cadena_id, f"error_intento_{attempt}")
-
             if attempt < settings.max_retries:
                 wait_secs = settings.retry_interval_minutes * 60
-                logger.info(
-                    f"[Clock] Reintentando {cadena_id} en "
-                    f"{settings.retry_interval_minutes} min..."
-                )
-                # Wait interruptibly: returns early if cancel is requested
+                logger.info(f"[Clock] Reintentando {cadena_id} en {settings.retry_interval_minutes} min...")
                 try:
                     await asyncio.wait_for(_cancel_event.wait(), timeout=wait_secs)
-                    # Event was set → cancel requested
-                    logger.info(f"[Clock] Espera de reintento cancelada para {cadena_id}.")
                     await _update_checkpoint(execution_id, cadena_id, "cancelled")
                     return False
                 except asyncio.TimeoutError:
-                    pass  # Normal: wait elapsed, proceed with retry
+                    pass
 
     await _update_checkpoint(execution_id, cadena_id, "failed")
     return False
 
 
-async def _dispatch_harvester(cadena: dict[str, Any]) -> None:
-    from modules.harvester import run_harvester  # import diferido para evitar ciclos
-    async with scraping_semaphore:
-        await run_harvester(cadena, semaphore=scraping_semaphore)
+async def _dispatch_harvester(cadena: dict[str, Any]) -> int:
+    from modules.harvester import run_harvester
+    async with browser_semaphore:
+        return await run_harvester(cadena, semaphore=page_semaphore)
 
 
 async def _run_promo_engine_phase(cadenas: list[dict[str, Any]]) -> None:
-    from modules.promo_engine import run_promo_engine  # import diferido
-    tasks = [run_promo_engine(cadena) for cadena in cadenas]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    from modules.promo_engine import run_promo_engine
+    results = await asyncio.gather(*[run_promo_engine(c) for c in cadenas], return_exceptions=True)
     for cadena, result in zip(cadenas, results):
         if isinstance(result, Exception):
-            logger.error(
-                f"[Clock] PromoEngine falló para {cadena['cadena_id']}: {result}"
-            )
+            logger.error(f"[Clock] PromoEngine fallo para {cadena['cadena_id']}: {result}")
         else:
-            logger.info(
-                f"[Clock] PromoEngine {cadena['cadena_id']}: {result} reglas"
-            )
+            logger.info(f"[Clock] PromoEngine {cadena['cadena_id']}: {result} reglas")
 
 
 # ---------------------------------------------------------------------------
@@ -210,57 +205,46 @@ async def _run_promo_engine_phase(cadenas: list[dict[str, Any]]) -> None:
 
 def build_scheduler() -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=ARGENTINA_TZ)
-
-    # Disparo 1: 06:00 AM Argentina
     scheduler.add_job(
         _run_scraping_cycle,
         trigger=CronTrigger(hour=settings.schedule_hour_1, minute=0, timezone=ARGENTINA_TZ),
         kwargs={"triggered_by": "scheduler_6am"},
-        id="scraping_6am",
-        replace_existing=True,
-        max_instances=1,
+        id="scraping_6am", replace_existing=True, max_instances=1,
     )
-
-    # Disparo 2: 12:00 PM Argentina
     scheduler.add_job(
         _run_scraping_cycle,
         trigger=CronTrigger(hour=settings.schedule_hour_2, minute=0, timezone=ARGENTINA_TZ),
         kwargs={"triggered_by": "scheduler_12pm"},
-        id="scraping_12pm",
-        replace_existing=True,
-        max_instances=1,
+        id="scraping_12pm", replace_existing=True, max_instances=1,
     )
-
     return scheduler
 
 
 # ---------------------------------------------------------------------------
-# API pública del módulo
+# API publica del modulo
 # ---------------------------------------------------------------------------
 
 async def trigger_manual() -> dict[str, str]:
-    """Disparo manual desde el Dashboard (Módulo 6)."""
+    """Disparo manual desde el Dashboard."""
     if _scraping_lock.locked():
-        return {"status": "busy", "message": "Ya hay un ciclo en ejecución."}
-
+        return {"status": "busy", "message": "Ya hay un ciclo en ejecucion."}
     asyncio.create_task(_run_scraping_cycle(triggered_by="manual"))
     return {"status": "started", "message": "Ciclo manual iniciado."}
 
 
 async def cancel_scraping() -> dict[str, str]:
-    """Cancela el ciclo activo lo antes posible (entre cadenas o retries)."""
+    """Cancela el ciclo activo lo antes posible."""
     if not _scraping_lock.locked():
-        return {"status": "idle", "message": "No hay ciclo en ejecución."}
+        return {"status": "idle", "message": "No hay ciclo en ejecucion."}
     _cancel_event.set()
-    logger.info("[Clock] Cancelación solicitada por usuario.")
-    return {"status": "cancelling", "message": "Cancelación solicitada. El ciclo se detendrá pronto."}
+    logger.info("[Clock] Cancelacion solicitada por usuario.")
+    return {"status": "cancelling", "message": "Cancelacion solicitada. El ciclo se detendra pronto."}
 
 
 async def get_last_log() -> dict | None:
-    """Devuelve el último log de ejecución."""
-    doc = await get_db().scraping_logs.find_one(
-        sort=[("started_at", -1)]
-    )
+    """Devuelve el ultimo log de ejecucion."""
+    doc = await get_db().scraping_logs.find_one(sort=[("started_at", -1)])
     if doc:
         doc.pop("_id", None)
     return doc
+

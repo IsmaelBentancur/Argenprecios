@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Argenprecios — Dashboard</title>
+  <title>Argenprecios &ndash; Dashboard</title>
   <style>
     :root {
       --bg: #0f1117;
@@ -27,22 +27,13 @@
 
     main { padding: 20px 24px; }
 
-    /* Wallet */
     .wallet-section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 20px; }
     .wallet-section h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; }
-    .wallet-inputs { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-    .wallet-inputs input { flex: 1; min-width: 200px; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
-    .wallet-inputs input::placeholder { color: var(--muted); }
     .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: opacity .15s; }
     .btn:hover { opacity: .85; }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-secondary { background: var(--border); color: var(--text); }
-    .wallet-tags { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-    .tag { background: var(--border); border-radius: 20px; padding: 4px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
-    .tag .remove { cursor: pointer; color: var(--muted); font-weight: 700; }
-    .tag .remove:hover { color: var(--red); }
 
-    /* Wallet chips */
     .wallet-group { margin-bottom: 14px; }
     .wallet-group-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
     .wallet-chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -52,13 +43,11 @@
     .fidelidad-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; padding-left: 10px; border-left: 2px solid var(--border); }
     .fidelidad-label { font-size: 11px; color: var(--muted); }
 
-    /* Búsqueda */
     .search-bar { display: flex; gap: 10px; margin-bottom: 16px; }
     .search-bar input { flex: 1; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; }
     .search-bar input::placeholder { color: var(--muted); }
     .search-bar select { padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; }
 
-    /* Tabla */
     .table-container { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
     table { width: 100%; border-collapse: collapse; }
     thead th { background: var(--surface); padding: 10px 14px; text-align: left; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -73,18 +62,15 @@
     .price-unit { color: var(--muted); font-size: 11px; display: block; }
     .badge-cadena { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
     .badge-COTO { background: #1e3a5f; color: #7eb8f7; }
-    .badge-CARREFOUR { background: #1e3a1e; color: #7ef7a0; }
     .badge-best { background: #14532d; color: var(--green); }
     .savings { color: var(--green); font-size: 12px; }
     .no-data { text-align: center; color: var(--muted); padding: 40px; }
 
-    /* Paginación */
     .pagination { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
     .pagination button { padding: 6px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px; }
     .pagination button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
     .pagination button:disabled { opacity: .4; cursor: not-allowed; }
 
-    /* Modal comparativa */
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; }
     .modal-overlay.open { display: flex; }
     .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; }
@@ -98,12 +84,8 @@
     .price-value { font-size: 16px; font-weight: 700; }
     .reglas-list { margin-top: 8px; font-size: 11px; color: var(--muted); }
 
-    /* Trigger manual */
     .actions-bar { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; }
-    .status-idle { background: var(--muted); }
 
-    /* Cart */
     .cart-btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; transition: opacity .15s; }
     .cart-btn:hover { opacity: .85; }
     .cart-badge { background: var(--red); color: #fff; border-radius: 10px; padding: 1px 6px; font-size: 11px; margin-left: 4px; }
@@ -137,7 +119,6 @@
     .cart-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 299; }
     .cart-overlay.open { display: block; }
 
-    /* Harvester status panel */
     .harvester-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; }
     .harvester-panel h2 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px; }
     .harvester-row { display: flex; gap: 24px; flex-wrap: wrap; align-items: center; }
@@ -157,7 +138,6 @@
     .cp-error   { border-color: var(--red); color: var(--red); }
     .h-error-msg { font-size: 11px; color: var(--red); margin-top: 6px; font-family: monospace; }
 
-    /* Tabs */
     .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
     .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 500; transition: all .15s; }
     .tab:hover { color: var(--text); }
@@ -165,18 +145,6 @@
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
 
-    /* Inventario */
-    .inv-form { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-    .inv-form h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing:.05em; margin-bottom: 12px; }
-    .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-    .form-group { display: flex; flex-direction: column; gap: 4px; }
-    .form-group label { font-size: 11px; color: var(--muted); }
-    .form-group input, .form-group select { padding: 7px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-size: 13px; }
-    .alert-verde { background: #14532d22; border: 1px solid var(--green); color: var(--green); padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-top: 6px; }
-    .alert-rojo { background: #7f1d1d22; border: 1px solid var(--red); color: var(--red); padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-top: 6px; }
-    .alert-amarillo { background: #78350f22; border: 1px solid var(--yellow); color: var(--yellow); padding: 8px 12px; border-radius: 6px; font-size: 12px; margin-top: 6px; }
-
-    /* Feedback */
     .feedback-btn { position: fixed; bottom: 24px; right: 24px; z-index: 200; background: var(--accent); color: #fff; border: none; border-radius: 24px; padding: 10px 20px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.4); transition: opacity .15s; }
     .feedback-btn:hover { opacity: .85; }
     .feedback-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 400; align-items: center; justify-content: center; }
@@ -187,146 +155,117 @@
     .feedback-modal textarea { resize: vertical; min-height: 100px; }
     .feedback-modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
     .feedback-success { color: var(--green); font-size: 13px; text-align: center; padding: 8px 0; }
-
-    /* POS */
-    .pos-layout { display: grid; grid-template-columns: 1fr 340px; gap: 16px; }
-    .pos-scanner { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-    .pos-cart { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-    .pos-scan-bar { display: flex; gap: 8px; margin-bottom: 14px; }
-    .pos-scan-bar input { flex: 1; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 15px; letter-spacing: .05em; }
-    .scan-result { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 10px; }
-    .scan-result h4 { font-size: 15px; margin-bottom: 8px; }
-    .scan-prices { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
-    .cart-items { flex: 1; overflow-y: auto; max-height: 320px; }
-    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-    .cart-total { border-top: 2px solid var(--border); padding-top: 10px; font-size: 18px; font-weight: 700; }
-    .medio-select { width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
   </style>
 </head>
 <body>
 
 <header>
-  <h1>🛒 Argenprecios</h1>
+  <h1>&#x1F6D2; Argenprecios</h1>
   <div class="stats-bar">
-    <div class="stat">Productos<span id="stat-productos">—</span></div>
-    <div class="stat">Reglas de Descuento<span id="stat-reglas">—</span></div>
-    <div class="stat">Último ciclo<span id="stat-ciclo">—</span></div>
+    <div class="stat">Productos<span id="stat-productos">&ndash;</span></div>
+    <div class="stat">Reglas de Descuento<span id="stat-reglas">&ndash;</span></div>
+    <div class="stat">&Uacute;ltimo ciclo<span id="stat-ciclo">&ndash;</span></div>
+    <div class="stat">Argentina<span id="stat-hora" style="font-size:13px;font-family:monospace;">--:--:--</span></div>
   </div>
   <button class="cart-btn" onclick="toggleCart()">Carrito <span class="cart-badge" id="cart-count">0</span></button>
 </header>
 
-<!-- Cart overlay -->
 <div class="cart-overlay" id="cart-overlay" onclick="toggleCart()"></div>
 
-<!-- Cart panel -->
 <div class="cart-panel" id="cart-panel">
   <div class="cart-header">
     <h3>Mi Carrito</h3>
-    <button class="cart-close" onclick="toggleCart()">✕</button>
+    <button class="cart-close" onclick="toggleCart()">&#x2715;</button>
   </div>
   <div class="cart-items-list" id="cart-items-list">
-    <div class="cart-empty">El carrito está vacío.<br>Agregá productos desde la tabla.</div>
+    <div class="cart-empty">El carrito est&aacute; vac&iacute;o.<br>Agreg&aacute; productos desde la tabla.</div>
   </div>
   <div class="cart-calc" id="cart-calc" style="display:none">
     <div class="cart-modes">
       <button class="cart-mode-btn active" id="mode-btn-single" onclick="setCartMode('single')">Un supermercado</button>
       <button class="cart-mode-btn" id="mode-btn-split" onclick="setCartMode('split')">Dividido en 2</button>
-      <button class="cart-mode-btn" id="mode-btn-max" onclick="setCartMode('max')">Ahorro máximo</button>
+      <button class="cart-mode-btn" id="mode-btn-max" onclick="setCartMode('max')">Ahorro m&aacute;ximo</button>
     </div>
     <div class="cart-result" id="cart-result"></div>
   </div>
 </div>
 
 <main>
-  <!-- Pestañas de navegación -->
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('precios')">📊 Comparador de Precios</div>
+    <div class="tab active" onclick="switchTab('precios')">&#x1F4CA; Comparador de Precios</div>
   </div>
-<!-- ======================================================= TAB PRECIOS -->
-<div id="tab-precios" class="tab-panel active">
 
-  <!-- Sección: Billetera (medios de pago) -->
-  <div class="wallet-section">
-    <h2>💳 Mi Billetera</h2>
-    <div class="wallet-group">
-      <div class="wallet-group-label">Métodos de pago</div>
-      <div class="wallet-chips" id="chips-tarjetas"></div>
+  <div id="tab-precios" class="tab-panel active">
+
+    <div class="wallet-section">
+      <h2>&#x1F4B3; Mi Billetera</h2>
+      <div class="wallet-group">
+        <div class="wallet-group-label">M&eacute;todos de pago</div>
+        <div class="wallet-chips" id="chips-tarjetas"></div>
+      </div>
     </div>
-  </div>
 
-  <!-- Sección: Supermercados + Fidelidad -->
-  <div class="wallet-section">
-    <h2>🏪 Supermercados</h2>
-    <div class="wallet-group">
-      <div class="wallet-group-label">Supermercados</div>
-      <div class="wallet-chips" id="chips-supermercados"></div>
+    <div class="wallet-section">
+      <h2>&#x1F3EA; Supermercados</h2>
+      <div class="wallet-group">
+        <div class="wallet-group-label">Supermercados</div>
+        <div class="wallet-chips" id="chips-supermercados"></div>
+      </div>
+      <div id="chips-fidelidad"></div>
+      <button class="btn btn-secondary" style="margin-top:12px" onclick="saveWallet()">Guardar billetera</button>
     </div>
-    <div id="chips-fidelidad"></div>
-    <button class="btn btn-secondary" style="margin-top:12px" onclick="saveWallet()">Guardar billetera</button>
-  </div>
 
-  <!-- Barra de acciones -->
-  <div class="actions-bar">
-    <button class="btn btn-secondary" onclick="triggerManual()">⚡ Disparar scraping ahora</button>
-    <button class="btn" id="cancel-btn" onclick="cancelScraping()" style="display:none;background:var(--red);color:#fff;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600">✕ Cancelar ciclo</button>
-    <span id="cycle-status" style="color:var(--muted);font-size:12px;"></span>
-  </div>
-
-  <!-- Estado del Harvester -->
-  <div class="harvester-panel">
-    <h2>Estado del Harvester</h2>
-    <div id="harvester-status-content">
-      <span style="color:var(--muted);font-size:12px;">Cargando...</span>
+    <div class="actions-bar">
+      <button class="btn btn-secondary" onclick="triggerManual()">&#x26A1; Disparar scraping ahora</button>
+      <button class="btn" id="cancel-btn" onclick="cancelScraping()" style="display:none;background:var(--red);color:#fff;padding:8px 16px;border-radius:6px;border:none;cursor:pointer;font-size:13px;font-weight:600">&#x2715; Cancelar ciclo</button>
+      <span id="cycle-status" style="color:var(--muted);font-size:12px;"></span>
     </div>
+
+    <div class="harvester-panel">
+      <h2>Estado del Harvester</h2>
+      <div id="harvester-status-content">
+        <span style="color:var(--muted);font-size:12px;">Cargando...</span>
+      </div>
+    </div>
+
+    <div class="search-bar">
+      <input id="search-input" type="text" placeholder="Buscar producto por nombre..." oninput="debounceSearch()" />
+      <select id="cadena-filter" onchange="loadProducts()">
+        <option value="">Todas las cadenas</option>
+      </select>
+    </div>
+
+    <div class="table-container">
+      <table>
+        <thead id="products-thead">
+          <tr>
+            <th>EAN</th>
+            <th>Producto</th>
+            <th>Mejor precio</th>
+            <th>Precio/unidad</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="products-tbody">
+          <tr><td colspan="7" class="no-data">Cargando productos...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+
   </div>
-
-  <!-- Búsqueda -->
-  <div class="search-bar">
-    <input id="search-input" type="text" placeholder="Buscar producto por nombre..." oninput="debounceSearch()" />
-    <select id="cadena-filter" onchange="loadProducts()">
-      <option value="">Todas las cadenas</option>
-      <option value="COTO">Coto</option>
-      <option value="CARREFOUR">Carrefour</option>
-    </select>
-  </div>
-
-  <!-- Tabla de productos -->
-  <div class="table-container">
-    <table>
-      <thead id="products-thead">
-        <tr>
-          <th>EAN</th>
-          <th>Producto</th>
-          <th>Mejor precio</th>
-          <th>Precio/unidad</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="products-tbody">
-        <tr><td colspan="7" class="no-data">Cargando productos...</td></tr>
-      </tbody>
-    </table>
-  </div>
-  <div class="pagination" id="pagination"></div>
-
-</div><!-- /tab-precios -->
-
-
 </main>
 
-<!-- Modal de comparativa -->
 <div class="modal-overlay" id="modal" onclick="closeModal(event)">
   <div class="modal">
-    <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">✕</button>
+    <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">&#x2715;</button>
     <h3 id="modal-title">Comparativa</h3>
     <div id="modal-body"></div>
   </div>
 </div>
 
-<!-- Feedback button -->
-<button class="feedback-btn" onclick="openFeedback()">💬 Sugerencias</button>
+<button class="feedback-btn" onclick="openFeedback()">&#x1F4AC; Sugerencias</button>
 
-<!-- Feedback modal -->
 <div class="feedback-modal-overlay" id="feedback-modal-overlay" onclick="closeFeedbackOnOverlay(event)">
   <div class="feedback-modal">
     <h3>Enviar sugerencia o reporte</h3>
@@ -335,7 +274,7 @@
       <option value="bug">Reportar un error</option>
       <option value="otro">Otro</option>
     </select>
-    <textarea id="feedback-mensaje" placeholder="Contanos qué encontraste o qué mejorarías..."></textarea>
+    <textarea id="feedback-mensaje" placeholder="Contanos qu&eacute; encontraste o qu&eacute; mejorar&iacute;as..."></textarea>
     <div id="feedback-status"></div>
     <div class="feedback-modal-actions">
       <button class="btn btn-secondary" onclick="closeFeedback()">Cancelar</button>
@@ -345,6 +284,24 @@
 </div>
 
 <script>
+  // Reloj Argentina (UTC-3, America/Argentina/Buenos_Aires)
+  function updateClock() {
+    var now = new Date();
+    var opts = {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    };
+    var parts = new Intl.DateTimeFormat('es-AR', opts).formatToParts(now);
+    var p = {};
+    parts.forEach(function(x) { p[x.type] = x.value; });
+    document.getElementById('stat-hora').textContent =
+      p.day + '/' + p.month + ' ' + p.hour + ':' + p.minute + ':' + p.second;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
   function openFeedback() {
     document.getElementById('feedback-modal-overlay').classList.add('open');
     document.getElementById('feedback-status').textContent = '';
@@ -357,36 +314,50 @@
     if (e.target === document.getElementById('feedback-modal-overlay')) closeFeedback();
   }
   async function submitFeedback() {
-    const mensaje = document.getElementById('feedback-mensaje').value.trim();
-    const tipo = document.getElementById('feedback-tipo').value;
-    const statusEl = document.getElementById('feedback-status');
-    if (!mensaje) { statusEl.textContent = 'Por favor escribí un mensaje.'; statusEl.style.color = 'var(--red)'; return; }
+    var mensaje = document.getElementById('feedback-mensaje').value.trim();
+    var tipo = document.getElementById('feedback-tipo').value;
+    var statusEl = document.getElementById('feedback-status');
+    if (!mensaje) {
+      statusEl.textContent = 'Por favor escribi un mensaje.';
+      statusEl.style.color = 'var(--red)';
+      return;
+    }
     try {
-      const res = await fetch('/api/feedback', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ mensaje, tipo }) });
+      var res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ mensaje: mensaje, tipo: tipo })
+      });
       if (res.ok) {
         statusEl.className = 'feedback-success';
-        statusEl.textContent = '¡Gracias! Tu mensaje fue enviado.';
+        statusEl.textContent = '!Gracias! Tu mensaje fue enviado.';
         setTimeout(closeFeedback, 1500);
       } else {
-        const err = await res.json();
+        var err = await res.json();
         statusEl.textContent = err.detail || 'Error al enviar.';
         statusEl.style.color = 'var(--red)';
       }
-    } catch { statusEl.textContent = 'Error de conexión.'; statusEl.style.color = 'var(--red)'; }
+    } catch(ex) {
+      statusEl.textContent = 'Error de conexion.';
+      statusEl.style.color = 'var(--red)';
+    }
   }
 </script>
 
-<script src="/static/app.js?v=6"></script>
-  <footer style="margin-top: 40px; padding: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center;">
-    <p>
-      Argenprecios es una herramienta independiente de transparencia de precios para el consumidor argentino, fundada en el Art. 42 de la Constitución Nacional y la Ley 24.240 de Defensa del Consumidor. 
-      Los precios publicados son referenciales, obtenidos de sitios de acceso público, y pueden variar según sucursal, fecha y disponibilidad de stock. 
-      Los precios de fidelidad, bancarios o promocionales pueden no estar reflejados. 
-      Argenprecios no tiene vinculación comercial con las cadenas de supermercados mencionadas. 
-      El software opera respetando la disponibilidad de los sitios de origen y no realiza operaciones que interfieran con su funcionamiento. 
-      Ley 25.326: no se procesan datos personales de usuarios.
-    </p>
-  </footer>
+<script src="/static/app.js?v=9"></script>
+
+<footer style="margin-top: 40px; padding: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 11px; line-height: 1.6; text-align: center;">
+  <p>
+    Argenprecios es una herramienta independiente de transparencia de precios para el consumidor argentino,
+    fundada en el Art. 42 de la Constituci&oacute;n Nacional y la Ley 24.240 de Defensa del Consumidor.
+    Los precios publicados son referenciales, obtenidos de sitios de acceso p&uacute;blico, y pueden variar
+    seg&uacute;n sucursal, fecha y disponibilidad de stock.
+    Los precios de fidelidad, bancarios o promocionales pueden no estar reflejados.
+    Argenprecios no tiene vinculaci&oacute;n comercial con las cadenas de supermercados mencionadas.
+    El software opera respetando la disponibilidad de los sitios de origen y no realiza operaciones
+    que interfieran con su funcionamiento.
+    Ley 25.326: no se procesan datos personales de usuarios.
+  </p>
+</footer>
 </body>
 </html>
-
