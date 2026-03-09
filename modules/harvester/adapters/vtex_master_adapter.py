@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 VtexMasterAdapter: Adaptador universal para cadenas basadas en VTEX IO.
 Cubre ~90% del retail digital argentino con el mismo codigo base.
@@ -48,9 +48,6 @@ class VtexMasterAdapter(BaseAdapter):
                 try:
                     data = await response.json()
                     products = self._detect_products(data)
-                    if not products and any(k in response.url for k in ("product", "search")):
-                        logger.trace(f"[{self.cadena_id}] No se detectaron productos en API match: {response.url[:100]}")
-                    
                     for p in products:
                         ean = self._extract_vtex_ean(p)
                         if ean and ean not in processed_eans:
@@ -83,7 +80,7 @@ class VtexMasterAdapter(BaseAdapter):
             function resolve(node, visited) {
                 if (!visited) visited = new Set();
                 if (node === null || typeof node !== 'object') return node;
-                // Apollo cache usa { __ref: "Key:id" } para referencias — nunca "id"
+                // Apollo cache refs usan { __ref: "Key:id" } — "id" es campo de datos, no ref
                 if (node.__ref && state[node.__ref]) {
                     if (visited.has(node.__ref)) return { __circular: true };
                     visited.add(node.__ref);
@@ -136,9 +133,13 @@ class VtexMasterAdapter(BaseAdapter):
                 yield product
             except asyncio.TimeoutError:
                 if page.is_closed():
+                    # DRENAJE FINAL: procesar lo que quede en el queue antes de salir
+                    while not queue.empty():
+                        yield await queue.get()
                     break
+                
                 idle_ticks += 1
-                # 5s idle sin API → modo SSR → extracción inline (página garantizadamente abierta)
+                # 5s idle sin API -> modo SSR -> extraccion inline (pagina garantizadamente abierta)
                 if not state_extracted and idle_ticks >= 5:
                     state_extracted = True
                     await _run_state_extraction()
@@ -190,21 +191,20 @@ class VtexMasterAdapter(BaseAdapter):
 
     def _detect_products(self, data: dict) -> list:
         if not isinstance(data, dict): return []
-        # 1. Apollo GraphQL standard (productSearch)
+        # 1. Apollo GraphQL standard
         if "data" in data and "productSearch" in data.get("data", {}):
             return data["data"]["productSearch"].get("products", [])
-        # 2. Apollo GraphQL variant (products)
-        if "data" in data and "products" in data.get("data", {}):
-            return data["data"]["products"]
-        # 3. Custom products key
+        # 2. Custom products key
         if "products" in data and isinstance(data["products"], list):
             return data["products"]
-        # 4. Search API direct response (Array of products)
+        # 3. Search API direct response (Array of products)
         if isinstance(data, list):
             return data
+        # 4. Standard GraphQL data key
+        if "data" in data and "products" in data.get("data", {}):
+            return data["data"]["products"]
         # 5. PickRuntime / __pickRuntime
         if "blocks" in data:
-            # Recursividad simple para buscar listas de productos en bloques de VTEX
             def find_products(obj):
                 if isinstance(obj, list) and len(obj) > 0 and isinstance(obj[0], dict) and "productId" in obj[0]:
                     return obj
@@ -217,15 +217,17 @@ class VtexMasterAdapter(BaseAdapter):
         return []
 
     def _extract_vtex_ean(self, product: dict) -> str | None:
+        """Extrae el EAN o EAN (8, 13 digitos) del producto VTEX."""
         items = product.get("items", [])
         if items:
             item = items[0]
             ean = item.get("ean")
-            if ean and len(ean) in (8, 13) and ean.isdigit(): return ean
+            if ean and ean.isdigit() and len(ean) in (8, 13): return ean
             ref_ids = item.get("referenceId") or []
             if isinstance(ref_ids, list) and ref_ids:
                 val = str(ref_ids[0].get("Value", ""))
                 if val.isdigit() and len(val) in (8, 13): return val
+        
         ref = product.get("productReference") or product.get("productId")
         if ref and str(ref).isdigit() and len(str(ref)) in (8, 13): return str(ref)
         return None
@@ -261,20 +263,22 @@ class DiscoAdapter(VtexMasterAdapter):
     cadena_id = "DISCO"
     base_url = "https://www.disco.com.ar"
     categories = [
-        "almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "quesos-y-fiambres",
-        "carniceria", "frutas-y-verduras", "congelados", "panaderia",
-        "almacen/desayuno-y-merienda", "almacen/golosinas-y-chocolates", "almacen/snacks",
-        "carniceria/embutidos", "lacteos/leches", "frutas-y-verduras/verduras", "frutas-y-verduras/frutas",
+        "almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "quesos-y-fiambres", 
+        "carnes", "frutas-y-verduras", "congelados", "panaderia-y-reposteria",
+        "Almacen/Desayuno-y-Merienda", "Almacen/Golosinas-y-Chocolates", "Almacen/Snacks",
+        "carnes/embutidos", "Lacteos/Leches", "Frutas-y-Verduras/Verduras", 
+        "Frutas-y-Verduras/Frutas"
     ]
 
 class VeaAdapter(VtexMasterAdapter):
     cadena_id = "VEA"
     base_url = "https://www.vea.com.ar"
     categories = [
-        "almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "quesos-y-fiambres",
+        "almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "quesos-y-fiambres", 
         "carnes", "frutas-y-verduras", "congelados", "panaderia-y-reposteria",
-        "almacen/desayuno-y-merienda", "almacen/golosinas-y-chocolates", "almacen/snacks",
-        "carnes/embutidos", "lacteos/leches", "frutas-y-verduras/verduras", "frutas-y-verduras/frutas",
+        "Almacen/Desayuno-y-Merienda", "Almacen/Golosinas-y-Chocolates", "Almacen/Snacks",
+        "carnes/embutidos", "Lacteos/Leches", "Frutas-y-Verduras/Verduras", 
+        "Frutas-y-Verduras/Frutas"
     ]
 
 class DiaAdapter(VtexMasterAdapter):
