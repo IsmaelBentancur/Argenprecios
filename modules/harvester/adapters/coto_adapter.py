@@ -92,31 +92,56 @@ class CotoAdapter(BaseAdapter):
     async def get_category_urls(self) -> list[str]:
         return _CATEGORY_URLS
 
-    async def parse_product_list(self, page: Page, url: str) -> AsyncIterator[ProductData]:
+    # Coto gestiona su propia navegación paginada — no usa el nav_task de BaseAdapter.
+    # Overrideamos _process_category para evitar la race condition entre el nav_task
+    # (que cierra la página) y la paginación interna del adaptador.
+    async def _process_category(self, browser, url: str) -> int:
+        from playwright.async_api import Browser
+        ctx = None
+        saved = 0
+        try:
+            ctx = await self._new_context(browser)
+            page = await ctx.new_page()
+            await self._block_resources(page)
+
+            batch: list[dict] = []
+            async for product in self._paginate(page, url):
+                if product.is_valid():
+                    batch.append(product.to_dict())
+
+            if batch:
+                saved = await self._save_batch(batch)
+                logger.info(f"[COTO] {len(batch)} productos en {url} ({saved} con cambios)")
+        except Exception as exc:
+            logger.error(f"[COTO] Error en {url}: {exc}")
+        finally:
+            if ctx:
+                try:
+                    await ctx.close()
+                except Exception as e:
+                    logger.debug(f"[COTO] ctx.close(): {e}")
+        return saved
+
+    # Satisface la interfaz abstracta — no se usa porque _process_category está overrideado.
+    async def parse_product_list(self, page: Page) -> AsyncIterator[ProductData]:
+        return
+        yield  # hace que sea un generador válido
+
+    async def _paginate(self, page: Page, url: str) -> AsyncIterator[ProductData]:
         base_url = url.split("?")[0]
         page_num = 1
-        seen_eans: set[str] = set()  # detect recycled pages (Coto loop guard)
+        seen_eans: set[str] = set()
         _MAX_PAGES = 60  # safety cap (~1440 productos max por categoria)
 
         while page_num <= _MAX_PAGES:
-            # Navegar a la página actual
+            current_url = f"{base_url}?page={page_num}" if page_num > 1 else base_url
             try:
-                current_url = f"{base_url}?page={page_num}" if page_num > 1 else base_url
                 await page.goto(current_url, wait_until="domcontentloaded", timeout=45000)
-                if page_num > 1: await asyncio.sleep(1.5)
+                if page_num > 1:
+                    await asyncio.sleep(1.5)
             except Exception as e:
                 logger.warning(f"[COTO] Error navegando a p{page_num}: {e}")
                 break
-            if page_num > 1:
-                try:
-                    await page.goto(
-                        f"{base_url}?page={page_num}",
-                        wait_until="domcontentloaded",
-                        timeout=30_000,
-                    )
-                    await asyncio.sleep(1.5)
-                except Exception:
-                    break
 
             logger.debug(f"[COTO] Pagina {page_num} | {base_url}")
 
@@ -132,17 +157,15 @@ class CotoAdapter(BaseAdapter):
             new_in_page = 0
             for card in cards:
                 product = await self._extract_from_card(card, page)
-                if product:
-                    if product.ean not in seen_eans:
-                        seen_eans.add(product.ean)
-                        new_in_page += 1
-                        yield product
+                if product and product.ean not in seen_eans:
+                    seen_eans.add(product.ean)
+                    new_in_page += 1
+                    yield product
 
             logger.debug(f"[COTO] Pagina {page_num}: {new_in_page} productos nuevos")
-            if new_in_page == 0:  # Coto recycled a previous page = end of results
-                logger.debug(f"[COTO] Sin productos nuevos en pagina {page_num}, deteniendo.")
+            if new_in_page == 0:
                 break
-            if len(cards) < 20:  # Coto muestra 24-48; menos = ultima pagina real
+            if len(cards) < 20:  # Coto muestra 24-48; menos = ultima pagina
                 break
 
             page_num += 1

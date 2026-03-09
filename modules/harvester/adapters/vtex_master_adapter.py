@@ -83,11 +83,11 @@ class VtexMasterAdapter(BaseAdapter):
             function resolve(node, visited) {
                 if (!visited) visited = new Set();
                 if (node === null || typeof node !== 'object') return node;
-                const refId = node.id || node.__ref;
-                if (refId && state[refId]) {
-                    if (visited.has(refId)) return { __circular: true };
-                    visited.add(refId);
-                    return resolve(state[refId], new Set(visited));
+                // Apollo cache usa { __ref: "Key:id" } para referencias — nunca "id"
+                if (node.__ref && state[node.__ref]) {
+                    if (visited.has(node.__ref)) return { __circular: true };
+                    visited.add(node.__ref);
+                    return resolve(state[node.__ref], new Set(visited));
                 }
                 if (Array.isArray(node)) return node.map(function(i) { return resolve(i, new Set(visited)); });
                 const out = {};
