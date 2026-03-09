@@ -260,12 +260,22 @@ class JumboAdapter(VtexMasterAdapter):
 class DiscoAdapter(VtexMasterAdapter):
     cadena_id = "DISCO"
     base_url = "https://www.disco.com.ar"
-    categories = ["almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "carniceria", "frutas-y-verduras", "congelados", "panaderia"]
+    categories = [
+        "almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "quesos-y-fiambres",
+        "carniceria", "frutas-y-verduras", "congelados", "panaderia",
+        "almacen/desayuno-y-merienda", "almacen/golosinas-y-chocolates", "almacen/snacks",
+        "carniceria/embutidos", "lacteos/leches", "frutas-y-verduras/verduras", "frutas-y-verduras/frutas",
+    ]
 
 class VeaAdapter(VtexMasterAdapter):
     cadena_id = "VEA"
     base_url = "https://www.vea.com.ar"
-    categories = ["almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "carnes", "frutas-y-verduras", "congelados", "panaderia-y-reposteria"]
+    categories = [
+        "almacen", "bebidas", "limpieza", "perfumeria", "lacteos", "quesos-y-fiambres",
+        "carnes", "frutas-y-verduras", "congelados", "panaderia-y-reposteria",
+        "almacen/desayuno-y-merienda", "almacen/golosinas-y-chocolates", "almacen/snacks",
+        "carnes/embutidos", "lacteos/leches", "frutas-y-verduras/verduras", "frutas-y-verduras/frutas",
+    ]
 
 class DiaAdapter(VtexMasterAdapter):
     cadena_id = "DIA"
